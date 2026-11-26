@@ -86,6 +86,13 @@ export const config = {
   googleQuoteTemplateId: process.env.GOOGLE_QUOTE_TEMPLATE_ID || '1gqy9ayxgQXSs7S28vMegrA7QCNE6Eks7',
   googlePiTemplateId: process.env.GOOGLE_PI_TEMPLATE_ID || '14wE8Y4asvGfqsIJpBneMIeOWInoENamH',
   
+  // Cloudflare R2 Object Storage (10 GB Free Tier, $0 Egress)
+  r2AccountId: process.env.R2_ACCOUNT_ID || '',
+  r2AccessKeyId: process.env.R2_ACCESS_KEY_ID || '',
+  r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
+  r2BucketName: process.env.R2_BUCKET_NAME || 'ambica-erp-docs',
+  r2PublicUrl: process.env.R2_PUBLIC_URL || '',
+
   localWorkbookPath: path.resolve(__dirname, '../../data/Ambica_Engineers_ERP_2026-2027_fixed.xlsx'),
   quotationTemplatePath: path.resolve(__dirname, '../../templates/quotation_template.xlsx'),
   piTemplatePath: path.resolve(__dirname, '../../templates/pi_template.xlsx'),

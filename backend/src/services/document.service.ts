@@ -7,6 +7,7 @@ import { Quotation, ProformaInvoice, DocumentItem, DocLogEntry } from '../types'
 import { SheetsService } from './sheets.service';
 import { SequenceService } from './sequence.service';
 import { renderHtmlToPdf } from './pdf.service';
+import { R2Service } from './r2.service';
 
 const outputBaseDir = path.resolve(__dirname, '../../output');
 
@@ -158,31 +159,45 @@ export class DocumentService {
     fs.writeFileSync(htmlPath, htmlContent, 'utf-8');
     await renderHtmlToPdf(htmlPath, pdfPath);
 
-    // 3. Upload to Google Drive if configured
+    // 3. Upload to Cloudflare R2 if configured (or fallback to local download link)
     let sheetUrl = `/api/documents/download?file=${encodeURIComponent(xlsxPath)}`;
     let pdfUrl = `/api/documents/download?file=${encodeURIComponent(pdfPath)}`;
     let fileId = '';
 
-    const drive = this.initDrive();
-    if (drive) {
-      try {
-        const uploadedPdf = await drive.files.create({
-          requestBody: {
-            name: pdfFileName,
-            parents: [config.googleDriveOutputFolderId],
-          },
-          media: {
-            mimeType: 'application/pdf',
-            body: fs.createReadStream(pdfPath),
-          },
-          fields: 'id, webViewLink',
-        });
-        if (uploadedPdf.data.id) {
-          fileId = uploadedPdf.data.id;
-          pdfUrl = uploadedPdf.data.webViewLink || pdfUrl;
+    if (R2Service.isConfigured()) {
+      const r2PdfKey = `quotations/${safeDocName}/${pdfFileName}`;
+      const r2PdfUrl = await R2Service.uploadFile(pdfPath, r2PdfKey, 'application/pdf');
+      if (r2PdfUrl) {
+        pdfUrl = r2PdfUrl;
+        fileId = r2PdfKey;
+      }
+      const r2XlsxKey = `quotations/${safeDocName}/${xlsxFileName}`;
+      const r2XlsxUrl = await R2Service.uploadFile(xlsxPath, r2XlsxKey, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      if (r2XlsxUrl) {
+        sheetUrl = r2XlsxUrl;
+      }
+    } else {
+      const drive = this.initDrive();
+      if (drive) {
+        try {
+          const uploadedPdf = await drive.files.create({
+            requestBody: {
+              name: pdfFileName,
+              parents: [config.googleDriveOutputFolderId],
+            },
+            media: {
+              mimeType: 'application/pdf',
+              body: fs.createReadStream(pdfPath),
+            },
+            fields: 'id, webViewLink',
+          });
+          if (uploadedPdf.data.id) {
+            fileId = uploadedPdf.data.id;
+            pdfUrl = uploadedPdf.data.webViewLink || pdfUrl;
+          }
+        } catch (err) {
+          console.warn('Could not upload to Google Drive:', err);
         }
-      } catch (err) {
-        console.warn('Could not upload to Google Drive:', err);
       }
     }
 
@@ -362,31 +377,45 @@ export class DocumentService {
     fs.writeFileSync(htmlPath, htmlContent, 'utf-8');
     await renderHtmlToPdf(htmlPath, pdfPath);
 
-    // 3. Upload to Google Drive if configured
+    // 3. Upload to Cloudflare R2 if configured (or fallback to local download link)
     let sheetUrl = `/api/documents/download?file=${encodeURIComponent(xlsxPath)}`;
     let pdfUrl = `/api/documents/download?file=${encodeURIComponent(pdfPath)}`;
     let fileId = '';
 
-    const drive = this.initDrive();
-    if (drive) {
-      try {
-        const uploadedPdf = await drive.files.create({
-          requestBody: {
-            name: pdfFileName,
-            parents: [config.googleDriveOutputFolderId],
-          },
-          media: {
-            mimeType: 'application/pdf',
-            body: fs.createReadStream(pdfPath),
-          },
-          fields: 'id, webViewLink',
-        });
-        if (uploadedPdf.data.id) {
-          fileId = uploadedPdf.data.id;
-          pdfUrl = uploadedPdf.data.webViewLink || pdfUrl;
+    if (R2Service.isConfigured()) {
+      const r2PdfKey = `pi/${safeDocName}/${pdfFileName}`;
+      const r2PdfUrl = await R2Service.uploadFile(pdfPath, r2PdfKey, 'application/pdf');
+      if (r2PdfUrl) {
+        pdfUrl = r2PdfUrl;
+        fileId = r2PdfKey;
+      }
+      const r2XlsxKey = `pi/${safeDocName}/${xlsxFileName}`;
+      const r2XlsxUrl = await R2Service.uploadFile(xlsxPath, r2XlsxKey, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      if (r2XlsxUrl) {
+        sheetUrl = r2XlsxUrl;
+      }
+    } else {
+      const drive = this.initDrive();
+      if (drive) {
+        try {
+          const uploadedPdf = await drive.files.create({
+            requestBody: {
+              name: pdfFileName,
+              parents: [config.googleDriveOutputFolderId],
+            },
+            media: {
+              mimeType: 'application/pdf',
+              body: fs.createReadStream(pdfPath),
+            },
+            fields: 'id, webViewLink',
+          });
+          if (uploadedPdf.data.id) {
+            fileId = uploadedPdf.data.id;
+            pdfUrl = uploadedPdf.data.webViewLink || pdfUrl;
+          }
+        } catch (err) {
+          console.warn('Could not upload to Google Drive:', err);
         }
-      } catch (err) {
-        console.warn('Could not upload to Google Drive:', err);
       }
     }
 
