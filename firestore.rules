@@ -1,0 +1,142 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// This security rules file assumes the following data structures:
+//
+// 1. /users/{userId}
+//    - uid: string (matches document id)
+//    - email: string
+//    - displayName: string
+//    - role: string ("ADMIN" | "SALES" | "OPERATIONS" | "VIEWER")
+//
+// 2. /customers/{customerId}
+//    - id: string
+//    - name: string
+//    - contactPerson: string (optional)
+//    - phone: string (optional)
+//    - email: string (optional)
+//    - city: string (optional)
+//    - state: string (optional)
+//
+// 3. /products/{productId}
+//    - id: string
+//    - description: string
+//    - hsn: string (optional)
+//    - active: bool
+//
+// 4. /enquiries/{enquiryId}
+//    - id: string
+//    - date: string
+//    - customer: string
+//    - items: array of maps { description: string, qty: number }
+//    - status: string
+//
+// 5. /orders/{orderId}
+//    - id: string
+//    - sourceEnquiryId: string
+//    - customer: string
+//    - items: array of maps { description: string, qty: number }
+//
+// 6. /quotations/{quotationId}
+//    - id: string
+//    - sourceEnquiryId: string
+//    - customer: string
+//
+// 7. /proformaInvoices/{piId}
+//    - id: string
+//    - orderId: string
+//    - customer: string
+//
+// 8. /docLogs/{logId}
+//    - documentNo: string
+//    - type: string
+//    - timestamp: string
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        getUserRole() == 'ADMIN' ||
+        request.auth.token.email == 'mohit@ambicaengineers.in'
+      );
+    }
+
+    function isStaff() {
+      return isAuthenticated();
+    }
+
+    // Default deny all unmatched collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || (isAuthenticated() && request.auth.uid == userId);
+    }
+
+    // Customers (PARTY_MASTER)
+    match /customers/{customerId} {
+      allow read: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Products (PRODUCT_MASTER)
+    match /products/{productId} {
+      allow read: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Enquiries
+    match /enquiries/{enquiryId} {
+      allow read: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Orders
+    match /orders/{orderId} {
+      allow read: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Quotations
+    match /quotations/{quotationId} {
+      allow read: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Proforma Invoices
+    match /proformaInvoices/{piId} {
+      allow read: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Document History Log
+    match /docLogs/{logId} {
+      allow read: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+  }
+}
