@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Receipt, Search, Plus, Download, AlertCircle, CheckCircle } from 'lucide-react';
+import { Receipt, Search, Plus, Download, AlertCircle, CheckCircle, Printer } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { apiRequest } from '../../lib/api';
 import { ProformaInvoice, Order } from '../../types';
@@ -168,29 +168,27 @@ function PIContent() {
                       <td className="px-4 py-3 text-slate-700 max-w-xs truncate" title={pi.allSummary}>
                         {pi.allSummary || `${pi.items?.length || 0} item(s)`}
                       </td>
-                      <td className="px-4 py-3 text-right space-x-2">
-                        {pi.sheetUrl && (
-                          <a
-                            href={pi.sheetUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded text-[11px] font-medium transition-colors"
-                          >
-                            <Download className="w-3 h-3 text-emerald-600" />
-                            <span>XLSX</span>
-                          </a>
-                        )}
-                        {pi.pdfUrl && (
-                          <a
-                            href={pi.pdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded text-[11px] font-medium transition-colors"
-                          >
-                            <Download className="w-3 h-3 text-red-600" />
-                            <span>PDF</span>
-                          </a>
-                        )}
+                      <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
+                        <a
+                          href={pi.pdfUrl || `/api/documents/view?type=pi&id=${encodeURIComponent(pi.id)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 rounded text-xs font-semibold shadow-sm transition-colors"
+                          title="Open, print, or save as PDF"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-orange-600" />
+                          <span>View & Print</span>
+                        </a>
+                        <a
+                          href={pi.sheetUrl || `/api/documents/excel?type=pi&id=${encodeURIComponent(pi.id)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded text-xs font-medium transition-colors"
+                          title="Download Excel Worksheet"
+                        >
+                          <Download className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>XLSX</span>
+                        </a>
                       </td>
                     </tr>
                   ))

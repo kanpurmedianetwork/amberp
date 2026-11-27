@@ -166,11 +166,11 @@ export class DocumentService {
       console.warn('[DocumentService] PDF generation notice (serverless fallback to HTML/XLSX):', pdfErr.message);
     }
 
-    // 3. Upload to Cloudflare R2 if configured (or fallback to local download link)
-    let sheetUrl = `/api/documents/download?file=${encodeURIComponent(xlsxPath)}`;
-    let pdfUrl = fs.existsSync(pdfPath)
-      ? `/api/documents/download?file=${encodeURIComponent(pdfPath)}`
-      : `/api/documents/view?file=${encodeURIComponent(htmlPath)}`;
+    // 3. Upload to Cloudflare R2 if configured (or fallback to dynamic view/download link)
+    const dynamicViewUrl = `/api/documents/view?type=quotation&id=${encodeURIComponent(docNo)}`;
+    const dynamicExcelUrl = `/api/documents/excel?type=quotation&id=${encodeURIComponent(docNo)}`;
+    let sheetUrl = dynamicExcelUrl;
+    let pdfUrl = dynamicViewUrl;
     let fileId = '';
 
     if (R2Service.isConfigured()) {
@@ -392,11 +392,11 @@ export class DocumentService {
       console.warn('[DocumentService] PDF generation notice (serverless fallback to HTML/XLSX):', pdfErr.message);
     }
 
-    // 3. Upload to Cloudflare R2 if configured (or fallback to local download link)
-    let sheetUrl = `/api/documents/download?file=${encodeURIComponent(xlsxPath)}`;
-    let pdfUrl = fs.existsSync(pdfPath)
-      ? `/api/documents/download?file=${encodeURIComponent(pdfPath)}`
-      : `/api/documents/view?file=${encodeURIComponent(htmlPath)}`;
+    // 3. Upload to Cloudflare R2 if configured (or fallback to dynamic view/download link)
+    const dynamicViewUrl = `/api/documents/view?type=pi&id=${encodeURIComponent(docNo)}`;
+    const dynamicExcelUrl = `/api/documents/excel?type=pi&id=${encodeURIComponent(docNo)}`;
+    let sheetUrl = dynamicExcelUrl;
+    let pdfUrl = dynamicViewUrl;
     let fileId = '';
 
     if (R2Service.isConfigured()) {
@@ -482,6 +482,141 @@ export class DocumentService {
   }
 
   // ==========================================
+  // IN-MEMORY DYNAMIC EXCEL & HTML STREAMERS
+  // ==========================================
+  public static async generateQuotationExcelBuffer(docNo: string): Promise<Buffer | null> {
+    await SheetsService.init();
+    const quotations = await SheetsService.getQuotations();
+    const qtn = quotations.find((q) => q.id.toLowerCase() === docNo.toLowerCase());
+    if (!qtn) return null;
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(config.quotationTemplatePath);
+    const sh = wb.getWorksheet('Quotation') || wb.worksheets[0];
+
+    sh.getCell('I2').value = qtn.id;
+    sh.getCell('I3').value = qtn.date;
+
+    // Seller
+    sh.getCell('A5').value = 'AMBICA ENGINEERS & LUBRICANTS LTD.';
+    sh.getCell('A6').value = '5th Floor, Sovereign Corporate Tower, Plot No.: A-143';
+    sh.getCell('A7').value = 'Sector - 136, Noida - 201304';
+    sh.getCell('A8').value = 'Uttar Pradesh, India';
+    sh.getCell('B9').value = '09AAUCA6324J1Z6';
+    sh.getCell('B10').value = qtn.assignedPerson || 'Mohit AbhayRaj Chhajer';
+    sh.getCell('E10').value = '91 76000 25020';
+    sh.getCell('B11').value = 'info@ambicaengineers.in';
+
+    // Buyer
+    sh.getCell('F5').value = qtn.customer;
+    sh.getCell('F7').value = qtn.city || '';
+    sh.getCell('F8').value = qtn.state || '';
+    sh.getCell('G10').value = qtn.contactPerson || '';
+    sh.getCell('I10').value = qtn.phone || '';
+    sh.getCell('G11').value = qtn.email || '';
+
+    // Clear items table & populate description and qty only
+    for (let r = 14; r <= 20; r++) {
+      sh.getCell('A' + r).value = '';
+      sh.getCell('G' + r).value = '';
+      sh.getCell('H' + r).value = '';
+      sh.getCell('I' + r).value = '';
+    }
+    for (let r = 22; r <= 26; r++) sh.getCell('I' + r).value = '';
+    sh.getCell('G28').value = '';
+
+    (qtn.items || []).slice(0, 7).forEach((item, idx) => {
+      const row = 14 + idx;
+      sh.getCell('A' + row).value = `${idx + 1}. ${item.description}`;
+      sh.getCell('G' + row).value = `${item.qty} Pcs`;
+    });
+
+    const uint8Array = await wb.xlsx.writeBuffer();
+    return Buffer.from(uint8Array);
+  }
+
+  public static async generatePIExcelBuffer(docNo: string): Promise<Buffer | null> {
+    await SheetsService.init();
+    const pis = await SheetsService.getPIs();
+    const pi = pis.find((p) => p.id.toLowerCase() === docNo.toLowerCase());
+    if (!pi) return null;
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(config.piTemplatePath);
+    const sh = wb.getWorksheet('PI') || wb.worksheets[0];
+
+    sh.getCell('I2').value = pi.id;
+    sh.getCell('I3').value = pi.date;
+
+    // Buyer
+    sh.getCell('A13').value = pi.customer;
+    sh.getCell('A14').value = pi.city || '';
+    sh.getCell('A15').value = pi.state || '';
+    sh.getCell('C17').value = pi.contactPerson || '';
+    sh.getCell('E17').value = pi.phone || '';
+    sh.getCell('C18').value = pi.email || '';
+
+    // Clear items & populate
+    for (let r = 21; r <= 25; r++) {
+      sh.getCell('B' + r).value = '';
+      sh.getCell('G' + r).value = '';
+    }
+
+    (pi.items || []).slice(0, 5).forEach((item, idx) => {
+      const row = 21 + idx;
+      sh.getCell('B' + row).value = `${idx + 1}. ${item.description}`;
+      sh.getCell('G' + row).value = `${item.qty} Pcs`;
+    });
+
+    const uint8Array = await wb.xlsx.writeBuffer();
+    return Buffer.from(uint8Array);
+  }
+
+  public static async getQuotationHtmlById(docNo: string): Promise<string | null> {
+    await SheetsService.init();
+    const quotations = await SheetsService.getQuotations();
+    const qtn = quotations.find((q) => q.id.toLowerCase() === docNo.toLowerCase());
+    if (!qtn) return null;
+
+    const logoDataUrl = this.getLogoBase64();
+    return this.generateQuotationHtml({
+      docNo: qtn.id,
+      date: qtn.date,
+      customer: qtn.customer,
+      city: qtn.city || '',
+      state: qtn.state || '',
+      contactPerson: qtn.contactPerson || '',
+      phone: qtn.phone || '',
+      email: qtn.email || '',
+      items: qtn.items || [],
+      logoDataUrl,
+    });
+  }
+
+  public static async getPIHtmlById(docNo: string): Promise<string | null> {
+    await SheetsService.init();
+    const pis = await SheetsService.getPIs();
+    const pi = pis.find((p) => p.id.toLowerCase() === docNo.toLowerCase());
+    if (!pi) return null;
+
+    const logoDataUrl = this.getLogoBase64();
+    return this.generatePIHtml({
+      docNo: pi.id,
+      date: pi.date,
+      purchaseOrder: pi.purchaseOrder || 'Verbal',
+      orderDate: pi.orderDate || pi.date,
+      customer: pi.customer,
+      city: pi.city || '',
+      state: pi.state || '',
+      contactPerson: pi.contactPerson || '',
+      phone: pi.phone || '',
+      email: pi.email || '',
+      items: pi.items || [],
+      logoDataUrl,
+    });
+  }
+
+  // ==========================================
   // HTML TEMPLATE RENDERERS
   // ==========================================
   private static generateQuotationHtml(data: {
@@ -537,9 +672,22 @@ export class DocumentService {
     .section-title { font-weight: 700; color: #ea580c; font-size: 11px; margin-bottom: 4px; }
     .label { color: #64748b; font-size: 10px; }
     .val { font-weight: 600; color: #0f172a; }
+    @media print {
+      .no-print { display: none !important; }
+      body { padding: 0 !important; }
+    }
   </style>
 </head>
 <body>
+  <!-- Print / Download Floating Action Bar -->
+  <div class="no-print" style="position:fixed;top:16px;right:24px;display:flex;gap:10px;z-index:99999;box-shadow:0 4px 14px rgba(0,0,0,0.15);border-radius:8px;padding:8px 12px;background:rgba(255,255,255,0.96);border:1px solid #fed7aa;">
+    <button onclick="window.print()" style="background:#ea580c;color:#ffffff;border:none;padding:8px 16px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
+      🖨️ Print / Save as PDF
+    </button>
+    <a href="/api/documents/excel?type=quotation&id=${encodeURIComponent(data.docNo)}" style="background:#0f766e;color:#ffffff;text-decoration:none;padding:8px 16px;border-radius:6px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;">
+      📥 Download Excel
+    </a>
+  </div>
   <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
     <div>
       ${data.logoDataUrl ? `<img src="${data.logoDataUrl}" class="header-logo" alt="Ambica Engineers">` : `<div style="font-size: 20px; font-weight: 900; color: #ea580c;">AMBICA ENGINEERS</div>`}
@@ -697,9 +845,22 @@ export class DocumentService {
     .section-title { font-weight: 700; color: #ea580c; font-size: 11px; margin-bottom: 4px; }
     .label { color: #64748b; font-size: 10px; }
     .val { font-weight: 600; color: #0f172a; }
+    @media print {
+      .no-print { display: none !important; }
+      body { padding: 0 !important; }
+    }
   </style>
 </head>
 <body>
+  <!-- Print / Download Floating Action Bar -->
+  <div class="no-print" style="position:fixed;top:16px;right:24px;display:flex;gap:10px;z-index:99999;box-shadow:0 4px 14px rgba(0,0,0,0.15);border-radius:8px;padding:8px 12px;background:rgba(255,255,255,0.96);border:1px solid #fed7aa;">
+    <button onclick="window.print()" style="background:#ea580c;color:#ffffff;border:none;padding:8px 16px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
+      🖨️ Print / Save as PDF
+    </button>
+    <a href="/api/documents/excel?type=pi&id=${encodeURIComponent(data.docNo)}" style="background:#0f766e;color:#ffffff;text-decoration:none;padding:8px 16px;border-radius:6px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;">
+      📥 Download Excel
+    </a>
+  </div>
   <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
     <div>
       ${data.logoDataUrl ? `<img src="${data.logoDataUrl}" class="header-logo" alt="Ambica Engineers">` : `<div style="font-size: 20px; font-weight: 900; color: #ea580c;">AMBICA ENGINEERS</div>`}

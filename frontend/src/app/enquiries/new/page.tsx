@@ -15,6 +15,8 @@ import {
   Phone,
   Mail,
   CheckCircle,
+  Printer,
+  Download,
 } from 'lucide-react';
 import { Header } from '../../../components/layout/Header';
 import { apiRequest } from '../../../lib/api';
@@ -49,6 +51,7 @@ export default function NewEnquiryPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [generatedQuote, setGeneratedQuote] = useState<{ docNo: string; viewUrl: string; excelUrl: string } | null>(null);
 
   useEffect(() => {
     // Load customers, active products, and next enquiry number
@@ -139,7 +142,7 @@ export default function NewEnquiryPage() {
 
       if (andGenerateQuote) {
         setSuccessMsg(`Enquiry ${newEnqId} created. Generating Quotation...`);
-        const qRes = await apiRequest<{ docNo: string; pdfUrl: string; xlsxPath: string }>(
+        const qRes = await apiRequest<{ docNo: string; pdfUrl: string; sheetUrl: string }>(
           '/quotations/generate',
           {
             method: 'POST',
@@ -147,9 +150,11 @@ export default function NewEnquiryPage() {
           }
         );
         setSuccessMsg(`Quotation ${qRes.docNo} generated successfully!`);
-        setTimeout(() => {
-          router.push(`/quotations`);
-        }, 1200);
+        setGeneratedQuote({
+          docNo: qRes.docNo,
+          viewUrl: qRes.pdfUrl || `/api/documents/view?type=quotation&id=${encodeURIComponent(qRes.docNo)}`,
+          excelUrl: qRes.sheetUrl || `/api/documents/excel?type=quotation&id=${encodeURIComponent(qRes.docNo)}`,
+        });
       } else {
         setTimeout(() => {
           router.push('/enquiries');
@@ -423,6 +428,60 @@ export default function NewEnquiryPage() {
           </div>
         </div>
       </main>
+
+      {/* Quotation Generated Success Modal */}
+      {generatedQuote && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200 p-6 text-center space-y-5">
+            <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600">
+              <CheckCircle className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Quotation Generated!</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Quotation <span className="font-mono font-bold text-orange-600">{generatedQuote.docNo}</span> has been generated and is ready for viewing, printing, and delivery.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2.5 pt-2">
+              <a
+                href={generatedQuote.viewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-bold shadow-md transition-colors"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Open, View & Print Quotation</span>
+              </a>
+              <a
+                href={generatedQuote.excelUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition-colors"
+              >
+                <Download className="w-4 h-4 text-emerald-600" />
+                <span>Download Excel Sheet (.xlsx)</span>
+              </a>
+            </div>
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+              <button
+                onClick={() => router.push('/quotations')}
+                className="text-slate-500 hover:text-slate-800 font-medium"
+              >
+                Go to Quotations List &rarr;
+              </button>
+              <button
+                onClick={() => {
+                  setGeneratedQuote(null);
+                  router.push('/enquiries');
+                }}
+                className="text-orange-600 hover:text-orange-700 font-semibold"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
