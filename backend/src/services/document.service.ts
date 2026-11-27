@@ -70,23 +70,165 @@ export class DocumentService {
 
   public static getSuggestedHsn(desc: string): string {
     const d = (desc || '').toLowerCase();
-    if (d.includes('valve') || d.includes('poppet') || d.includes('cock') || d.includes('solenoid')) return '84818090';
-    if (d.includes('pump') || d.includes('scy') || d.includes('cartridge kit') || d.includes('vane')) return '84139190';
-    if (d.includes('cylinder') || d.includes('actuator') || d.includes('hydro')) return '84122100';
-    if (d.includes('filter') || d.includes('element')) return '84212900';
-    if (d.includes('seal') || d.includes('o-ring')) return '40169320';
-    if (d.includes('sensor') || d.includes('transducer') || d.includes('gauge')) return '90262000';
-    if (d.includes('plate') || d.includes('mould') || d.includes('blade')) return '84799090';
-    if (d.includes('pad') || d.includes('cushion')) return '84799090';
-    return '84799090'; // 8-digit standard for machinery parts & accessories
+
+    // 1. Stainless Steel Press Plates / Moulds
+    if (
+      d.includes('press plate') ||
+      d.includes('ss plate') ||
+      d.includes('s.s plate') ||
+      d.includes('s.s press plate') ||
+      d.includes('stainless steel press plate') ||
+      d.includes('mould') ||
+      d.includes('texture plate')
+    ) {
+      return '73269099'; // Articles of stainless steel / press plates
+    }
+
+    // 2. Cushion Press Pads / Press Pads
+    if (d.includes('cushion') || d.includes('press pad') || d.includes('cushion pad')) {
+      return '84799090'; // Parts of press machinery / industrial pads
+    }
+
+    // 3. Hydraulic Pumps & Pump Components (SCY, YCY, A4VSO, PV2R, Vane, Cartridge, Gear pump, Vickers, Danfoss, etc.)
+    if (
+      d.includes('pump') ||
+      d.includes('scy') ||
+      d.includes('ycy') ||
+      d.includes('mcy') ||
+      d.includes('pv2r') ||
+      d.includes('a4vso') ||
+      d.includes('a10vso') ||
+      d.includes('a2fo') ||
+      d.includes('a7v') ||
+      d.includes('a4vg') ||
+      d.includes('danfoss') ||
+      d.includes('vane') ||
+      d.includes('cartridge kit') ||
+      d.includes('gpa1') ||
+      d.includes('gpa2') ||
+      d.includes('cbn') ||
+      d.includes('hy125') ||
+      d.includes('hy80') ||
+      d.includes('hy63') ||
+      d.includes('hc80') ||
+      d.includes('plunger') ||
+      d.includes('cylinder block for') ||
+      d.includes('pistons for') ||
+      d.includes('retainer plate for') ||
+      d.includes('valve plate for') ||
+      d.includes('denison') ||
+      d.includes('veljan') ||
+      d.includes('eckerle') ||
+      d.includes('etny')
+    ) {
+      return '84139190'; // Pumps & components
+    }
+
+    // 4. Valves (Solenoid, Check, Directional, Poppet, Relief, Prefill, Cartridge valves)
+    if (
+      d.includes('valve') ||
+      d.includes('poppet') ||
+      d.includes('cock') ||
+      d.includes('solenoid') ||
+      d.includes('4we') ||
+      d.includes('23qdf') ||
+      d.includes('dg4v') ||
+      d.includes('z2fs') ||
+      d.includes('m3sed') ||
+      d.includes('prefill') ||
+      d.includes('relief') ||
+      d.includes('cvi') ||
+      d.includes('cvu') ||
+      d.includes('lsv6') ||
+      d.includes('logic cartridge') ||
+      d.includes('throttle') ||
+      d.includes('unloader') ||
+      d.includes('check') ||
+      d.includes('11rce')
+    ) {
+      return '84818090'; // Valves & taps for hydraulics/pipes
+    }
+
+    // 5. Gearboxes, Motors, Drives, Speed Reducers
+    if (
+      d.includes('gear box') ||
+      d.includes('gearbox') ||
+      d.includes('motor') ||
+      d.includes('zlyj') ||
+      d.includes('racker roller') ||
+      d.includes('pinion') ||
+      d.includes('reducer')
+    ) {
+      return '84834000'; // Gears, gearboxes, and speed changers
+    }
+
+    // 6. Manometers, Pressure Gauges, Pressure Switches, Sensors
+    if (
+      d.includes('manometer') ||
+      d.includes('gauge') ||
+      d.includes('sensor') ||
+      d.includes('transducer') ||
+      d.includes('transmitter') ||
+      d.includes('pressure switch') ||
+      d.includes('jcs') ||
+      d.includes('acs')
+    ) {
+      return '90262000'; // Instruments for measuring/checking pressure
+    }
+
+    // 7. Hydraulic Cylinders & Actuators
+    if (d.includes('cylinder') || d.includes('actuator') || d.includes('hydro') || d.includes('ram')) {
+      return '84122100'; // Hydraulic cylinders and linear actuators
+    }
+
+    // 8. Filters & Purifying Elements
+    if (
+      d.includes('filter') ||
+      d.includes('element') ||
+      d.includes('strainer') ||
+      d.includes('hydac') ||
+      d.includes('internormen')
+    ) {
+      return '84212900'; // Filtering machinery and liquid filters
+    }
+
+    // 9. Asbestos & Insulation Mill Boards
+    if (d.includes('asbestos') || d.includes('mill board') || d.includes('insulation')) {
+      return '68129990'; // Fabricated asbestos fibres / insulation boards
+    }
+
+    // 10. Rubber Parts, Vacuum Cups, Seals, O-Rings
+    if (
+      d.includes('seal') ||
+      d.includes('o-ring') ||
+      d.includes('oring') ||
+      d.includes('gasket') ||
+      d.includes('vaccum cup') ||
+      d.includes('vacuum cup')
+    ) {
+      return '40169320'; // Gaskets, washers, rubber articles
+    }
+
+    // 11. Lubricants & Oils
+    if (d.includes('oil') || d.includes('lubricant') || d.includes('grease')) {
+      return '27101990'; // Petroleum oils / lubricating oils
+    }
+
+    // 12. Complete Press Machines & Powerpacks
+    if (d.includes('press machine') || d.includes('powerpack') || d.includes('powepack') || d.includes('plant') || d.includes('machine')) {
+      return '84798999'; // Industrial machinery having individual functions
+    }
+
+    return '84799090'; // General machinery parts & accessories
   }
 
   public static resolveHsn(hsn?: string, desc?: string): string {
+    const suggested = DocumentService.getSuggestedHsn(desc || '');
     const h = (hsn || '').trim();
-    if (h && h.length >= 6 && h !== '8479') {
-      return h;
+    if (!h || h.length < 6 || h === '8479' || (h === '84799090' && suggested !== '84799090')) {
+      return suggested;
     }
-    return DocumentService.getSuggestedHsn(desc || '');
+    return h;
   }
 
   public static async enrichItemsWithCalculations(items: DocumentItem[]): Promise<{
