@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import ExcelJS from 'exceljs';
 import { google, drive_v3 } from 'googleapis';
 import { config } from '../config';
@@ -9,7 +10,9 @@ import { SequenceService } from './sequence.service';
 import { renderHtmlToPdf } from './pdf.service';
 import { R2Service } from './r2.service';
 
-const outputBaseDir = path.resolve(__dirname, '../../output');
+const outputBaseDir = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
+  ? path.join(os.tmpdir(), 'ambica-output')
+  : path.resolve(__dirname, '../../output');
 
 export class DocumentService {
   private static driveApi: drive_v3.Drive | null = null;
@@ -157,19 +160,27 @@ export class DocumentService {
     });
 
     fs.writeFileSync(htmlPath, htmlContent, 'utf-8');
-    await renderHtmlToPdf(htmlPath, pdfPath);
+    try {
+      await renderHtmlToPdf(htmlPath, pdfPath);
+    } catch (pdfErr: any) {
+      console.warn('[DocumentService] PDF generation notice (serverless fallback to HTML/XLSX):', pdfErr.message);
+    }
 
     // 3. Upload to Cloudflare R2 if configured (or fallback to local download link)
     let sheetUrl = `/api/documents/download?file=${encodeURIComponent(xlsxPath)}`;
-    let pdfUrl = `/api/documents/download?file=${encodeURIComponent(pdfPath)}`;
+    let pdfUrl = fs.existsSync(pdfPath)
+      ? `/api/documents/download?file=${encodeURIComponent(pdfPath)}`
+      : `/api/documents/view?file=${encodeURIComponent(htmlPath)}`;
     let fileId = '';
 
     if (R2Service.isConfigured()) {
-      const r2PdfKey = `quotations/${safeDocName}/${pdfFileName}`;
-      const r2PdfUrl = await R2Service.uploadFile(pdfPath, r2PdfKey, 'application/pdf');
-      if (r2PdfUrl) {
-        pdfUrl = r2PdfUrl;
-        fileId = r2PdfKey;
+      if (fs.existsSync(pdfPath)) {
+        const r2PdfKey = `quotations/${safeDocName}/${pdfFileName}`;
+        const r2PdfUrl = await R2Service.uploadFile(pdfPath, r2PdfKey, 'application/pdf');
+        if (r2PdfUrl) {
+          pdfUrl = r2PdfUrl;
+          fileId = r2PdfKey;
+        }
       }
       const r2XlsxKey = `quotations/${safeDocName}/${xlsxFileName}`;
       const r2XlsxUrl = await R2Service.uploadFile(xlsxPath, r2XlsxKey, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -375,19 +386,27 @@ export class DocumentService {
     });
 
     fs.writeFileSync(htmlPath, htmlContent, 'utf-8');
-    await renderHtmlToPdf(htmlPath, pdfPath);
+    try {
+      await renderHtmlToPdf(htmlPath, pdfPath);
+    } catch (pdfErr: any) {
+      console.warn('[DocumentService] PDF generation notice (serverless fallback to HTML/XLSX):', pdfErr.message);
+    }
 
     // 3. Upload to Cloudflare R2 if configured (or fallback to local download link)
     let sheetUrl = `/api/documents/download?file=${encodeURIComponent(xlsxPath)}`;
-    let pdfUrl = `/api/documents/download?file=${encodeURIComponent(pdfPath)}`;
+    let pdfUrl = fs.existsSync(pdfPath)
+      ? `/api/documents/download?file=${encodeURIComponent(pdfPath)}`
+      : `/api/documents/view?file=${encodeURIComponent(htmlPath)}`;
     let fileId = '';
 
     if (R2Service.isConfigured()) {
-      const r2PdfKey = `pi/${safeDocName}/${pdfFileName}`;
-      const r2PdfUrl = await R2Service.uploadFile(pdfPath, r2PdfKey, 'application/pdf');
-      if (r2PdfUrl) {
-        pdfUrl = r2PdfUrl;
-        fileId = r2PdfKey;
+      if (fs.existsSync(pdfPath)) {
+        const r2PdfKey = `pi/${safeDocName}/${pdfFileName}`;
+        const r2PdfUrl = await R2Service.uploadFile(pdfPath, r2PdfKey, 'application/pdf');
+        if (r2PdfUrl) {
+          pdfUrl = r2PdfUrl;
+          fileId = r2PdfKey;
+        }
       }
       const r2XlsxKey = `pi/${safeDocName}/${xlsxFileName}`;
       const r2XlsxUrl = await R2Service.uploadFile(xlsxPath, r2XlsxKey, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

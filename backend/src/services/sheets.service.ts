@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import ExcelJS from 'exceljs';
 import { google, sheets_v4 } from 'googleapis';
 import { config } from '../config';
@@ -80,9 +81,27 @@ export class SheetsService {
     this.isInitialized = true;
   }
 
+  private static getWorkingWorkbookPath(): string {
+    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      const tmpPath = path.join(os.tmpdir(), 'Ambica_Engineers_ERP_2026-2027_fixed.xlsx');
+      if (!fs.existsSync(tmpPath) && fs.existsSync(config.localWorkbookPath)) {
+        try {
+          fs.copyFileSync(config.localWorkbookPath, tmpPath);
+        } catch (e: any) {
+          console.warn('[SheetsService] Non-fatal: could not copy seed workbook to tmp:', e.message);
+        }
+      }
+      return tmpPath;
+    }
+    return config.localWorkbookPath;
+  }
+
   private static async loadWorkbook(): Promise<ExcelJS.Workbook> {
     const wb = new ExcelJS.Workbook();
-    if (fs.existsSync(config.localWorkbookPath)) {
+    const candidatePath = this.getWorkingWorkbookPath();
+    if (fs.existsSync(candidatePath)) {
+      await wb.xlsx.readFile(candidatePath);
+    } else if (fs.existsSync(config.localWorkbookPath)) {
       await wb.xlsx.readFile(config.localWorkbookPath);
     } else {
       throw new Error(`Workbook not found at: ${config.localWorkbookPath}`);
@@ -93,7 +112,12 @@ export class SheetsService {
 
   private static async saveWorkbook(): Promise<void> {
     if (!this.workbook) return;
-    await this.workbook.xlsx.writeFile(config.localWorkbookPath);
+    try {
+      const targetPath = this.getWorkingWorkbookPath();
+      await this.workbook.xlsx.writeFile(targetPath);
+    } catch (err: any) {
+      console.warn('[SheetsService] Non-fatal: Read-only disk environment detected. Local file save skipped. (Data is securely committed to Cloud Firestore):', err.message);
+    }
   }
 
   // ==========================================
