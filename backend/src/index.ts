@@ -15,7 +15,12 @@ import { settingsRouter } from './routes/settings.routes';
 
 const app = express();
 
-app.use(cors({ origin: config.corsOrigin, credentials: true }));
+app.use(
+  cors({
+    origin: (origin, callback) => callback(null, true),
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
