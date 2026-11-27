@@ -92,9 +92,38 @@ export default function NewEnquiryPage() {
 
   const handleItemChange = (index: number, field: keyof DocumentItem, value: any) => {
     const updated = [...items];
-    updated[index] = { ...updated[index], [field]: value };
+    const current = { ...updated[index], [field]: value };
+
+    if (field === 'description') {
+      const desc = String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (desc) {
+        const matched = products.find((p) => {
+          const pClean = p.description.toLowerCase().replace(/[^a-z0-9]/g, '');
+          return pClean === desc || pClean.includes(desc) || desc.includes(pClean);
+        });
+        if (matched) {
+          const price = matched.defaultPrice || matched.oldPrice || 0;
+          current.unitPrice = price;
+          current.amount = (current.qty || 1) * price;
+        }
+      }
+    } else if (field === 'qty') {
+      const q = typeof value === 'number' ? value : parseInt(value, 10) || 1;
+      current.qty = q;
+      current.amount = q * (current.unitPrice || 0);
+    } else if (field === 'unitPrice') {
+      const p = typeof value === 'number' ? value : parseFloat(value) || 0;
+      current.unitPrice = p;
+      current.amount = (current.qty || 1) * p;
+    }
+
+    updated[index] = current;
     setItems(updated);
   };
+
+  const subTotal = items.reduce((sum, it) => sum + (it.amount || ((it.qty || 1) * (it.unitPrice || 0))), 0);
+  const gstAmount = Math.round(subTotal * 0.18 * 100) / 100;
+  const grandTotal = Math.round(subTotal + gstAmount);
 
   const validateAndSubmit = async (andGenerateQuote = false) => {
     setErrorMsg('');
@@ -175,14 +204,12 @@ export default function NewEnquiryPage() {
       />
 
       <main className="p-6 max-w-5xl space-y-6">
-        {/* Strict Compliance Banner */}
-        <div className="bg-amber-50 border border-amber-300 rounded-lg p-3.5 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
-          <div className="text-xs text-amber-900 leading-relaxed">
-            <span className="font-bold">Mandatory Enterprise Rule (Section 4):</span>
-            {' '}This form accepts <b>Item Description</b> and <b>Quantity ONLY</b>.
-            Fields for Unit Rate, Price, Total Amount, Availability, Payment Terms, and Item Remarks are intentionally omitted.
-            Prices will never be auto-filled or transferred from older records.
+        {/* Modern Enterprise Notice */}
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-3.5 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-orange-950 leading-relaxed">
+            <span className="font-bold">Enterprise Quotation Builder:</span>
+            {' '}Product descriptions automatically autocomplete with live catalog prices. Unit rates, amounts, and 18% GST are calculated in real time and can be customized per line item.
           </div>
         </div>
 
@@ -313,12 +340,12 @@ export default function NewEnquiryPage() {
             </div>
           </div>
 
-          {/* Strict Item Entry Table */}
+          {/* Line Items & Calculations Table */}
           <div>
             <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
                 <FileQuestion className="w-4 h-4 text-orange-600" />
-                <span>Line Items (Description & Quantity ONLY)</span>
+                <span>Line Items & Pricing (Auto-Calculated with GST)</span>
               </h2>
               <button
                 type="button"
@@ -333,17 +360,19 @@ export default function NewEnquiryPage() {
             <div className="space-y-3">
               <datalist id="product-list">
                 {products.map((p) => (
-                  <option key={p.id} value={p.description} />
+                  <option key={p.id} value={p.description}>
+                    {p.defaultPrice ? `₹ ${p.defaultPrice.toLocaleString('en-IN')}` : ''}
+                  </option>
                 ))}
               </datalist>
 
               {items.map((it, idx) => (
-                <div key={idx} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-md">
+                <div key={idx} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-md">
                   <div className="w-7 h-7 rounded bg-orange-100 text-orange-800 font-bold flex items-center justify-center text-xs flex-shrink-0">
                     {idx + 1}
                   </div>
 
-                  <div className="flex-1">
+                  <div className="flex-1 w-full">
                     <label className="block text-[10px] font-semibold text-slate-500 mb-1">
                       Item Description (Autocomplete from PRODUCT_MASTER) *
                     </label>
@@ -358,9 +387,9 @@ export default function NewEnquiryPage() {
                     />
                   </div>
 
-                  <div className="w-32">
+                  <div className="w-full sm:w-24">
                     <label className="block text-[10px] font-semibold text-slate-500 mb-1">
-                      Quantity (Units) *
+                      Qty *
                     </label>
                     <input
                       type="number"
@@ -374,7 +403,31 @@ export default function NewEnquiryPage() {
                     />
                   </div>
 
-                  <div className="pt-4">
+                  <div className="w-full sm:w-32">
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                      Rate / Price (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="100"
+                      placeholder="0.00"
+                      value={it.unitPrice || ''}
+                      onChange={(e) => handleItemChange(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded text-xs font-mono text-right focus:ring-1 focus:ring-orange-500 bg-white font-semibold"
+                    />
+                  </div>
+
+                  <div className="w-full sm:w-32">
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1 text-right">
+                      Amount (₹)
+                    </label>
+                    <div className="w-full px-3 py-1.5 bg-slate-100 border border-slate-200 rounded text-xs font-mono text-right font-bold text-slate-800">
+                      ₹ {((it.amount !== undefined ? it.amount : (it.qty || 1) * (it.unitPrice || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+
+                  <div className="pt-0 sm:pt-4 self-end sm:self-center">
                     <button
                       type="button"
                       disabled={items.length <= 1}
@@ -387,6 +440,27 @@ export default function NewEnquiryPage() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Calculations Summary Box */}
+            <div className="mt-4 p-4 bg-orange-50/60 border border-orange-200 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+              <div className="text-slate-600 text-[11px]">
+                <span className="font-semibold text-orange-900">Standard Terms:</span> 18% GST auto-applied. Final rounded amount will be reflected on generated Quotation & PI documents.
+              </div>
+              <div className="flex items-center gap-6 divide-x divide-orange-200 font-mono">
+                <div>
+                  <span className="text-[10px] text-slate-500 block uppercase font-sans">Subtotal</span>
+                  <span className="font-bold text-slate-800">₹ {subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="pl-6">
+                  <span className="text-[10px] text-slate-500 block uppercase font-sans">GST (18%)</span>
+                  <span className="font-semibold text-orange-700">₹ {gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="pl-6">
+                  <span className="text-[10px] text-slate-500 block uppercase font-sans">Grand Total</span>
+                  <span className="font-extrabold text-orange-900 text-sm">₹ {grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              </div>
             </div>
           </div>
 

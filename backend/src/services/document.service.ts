@@ -45,6 +45,98 @@ export class DocumentService {
     return '';
   }
 
+  public static numberToIndianWords(num: number): string {
+    const a = [
+      '', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
+      'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN',
+      'SEVENTEEN', 'EIGHTEEN', 'NINETEEN',
+    ];
+    const b = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+
+    const inWords = (n: number): string => {
+      if (n === 0) return '';
+      if (n < 20) return a[n];
+      if (n < 100) return b[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + a[n % 10] : '');
+      if (n < 1000) return a[Math.floor(n / 100)] + ' HUNDRED' + (n % 100 !== 0 ? ' ' + inWords(n % 100) : '');
+      if (n < 100000) return inWords(Math.floor(n / 1000)) + ' THOUSAND' + (n % 1000 !== 0 ? ' ' + inWords(n % 1000) : '');
+      if (n < 10000000) return inWords(Math.floor(n / 100000)) + ' LAKH' + (n % 100000 !== 0 ? ' ' + inWords(n % 100000) : '');
+      return inWords(Math.floor(n / 10000000)) + ' CRORE' + (n % 10000000 !== 0 ? ' ' + inWords(n % 10000000) : '');
+    };
+
+    const rounded = Math.round(num);
+    if (rounded === 0) return 'INR ZERO ONLY';
+    return `INR- ${inWords(rounded).trim().replace(/\s+/g, ' ')} ONLY`;
+  }
+
+  public static async enrichItemsWithCalculations(items: DocumentItem[]): Promise<{
+    items: DocumentItem[];
+    totals: {
+      subTotal: number;
+      packingForwarding: number;
+      gstAmount: number;
+      roundOff: number;
+      totalAmount: number;
+      totalInWords: string;
+    };
+  }> {
+    const products = await SheetsService.getProducts();
+    const cleanStr = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const enriched: DocumentItem[] = (items || []).map((it) => {
+      let unitPrice = it.unitPrice || 0;
+      const hsn = it.hsn || (it.description && it.description.toLowerCase().includes('valve') ? '84818090' : '8479');
+
+      if (!unitPrice || unitPrice === 0) {
+        const itemClean = cleanStr(it.description);
+        if (itemClean) {
+          // 1. Exact match
+          let matched = products.find((p) => cleanStr(p.description) === itemClean);
+          // 2. Substring match
+          if (!matched) {
+            matched = products.find((p) => {
+              const pClean = cleanStr(p.description);
+              return pClean.includes(itemClean) || itemClean.includes(pClean);
+            });
+          }
+          if (matched) {
+            unitPrice = matched.defaultPrice || matched.oldPrice || 0;
+          }
+        }
+      }
+
+      const qty = typeof it.qty === 'number' && it.qty > 0 ? it.qty : 1;
+      const amount = unitPrice * qty;
+
+      return {
+        ...it,
+        qty,
+        unitPrice,
+        amount,
+        hsn,
+      };
+    });
+
+    const subTotal = enriched.reduce((sum, it) => sum + (it.amount || 0), 0);
+    const packingForwarding = 0;
+    const gstAmount = Math.round(subTotal * 0.18 * 100) / 100;
+    const rawTotal = subTotal + packingForwarding + gstAmount;
+    const totalAmount = Math.round(rawTotal);
+    const roundOff = Math.round((totalAmount - rawTotal) * 100) / 100;
+    const totalInWords = this.numberToIndianWords(totalAmount);
+
+    return {
+      items: enriched,
+      totals: {
+        subTotal,
+        packingForwarding,
+        gstAmount,
+        roundOff,
+        totalAmount,
+        totalInWords,
+      },
+    };
+  }
+
   // ==========================================
   // QUOTATION GENERATOR
   // ==========================================
@@ -135,12 +227,23 @@ export class DocumentService {
     }
     sh.getCell('G28').value = '';
 
-    // Populate strictly Item Description & Quantity
-    enquiry.items.slice(0, 7).forEach((item, idx) => {
+    // Calculate items, prices, amounts, GST, and totals
+    const calc = await this.enrichItemsWithCalculations(enquiry.items);
+
+    calc.items.slice(0, 7).forEach((item, idx) => {
       const row = 14 + idx;
       sh.getCell('A' + row).value = `${idx + 1}. ${item.description}`;
-      sh.getCell('G' + row).value = `${item.qty} Pcs`;
+      sh.getCell('G' + row).value = item.qty;
+      sh.getCell('H' + row).value = item.unitPrice || 0;
+      sh.getCell('I' + row).value = item.amount || 0;
     });
+
+    sh.getCell('I22').value = calc.totals.subTotal;
+    sh.getCell('I23').value = calc.totals.packingForwarding;
+    sh.getCell('I24').value = calc.totals.gstAmount;
+    sh.getCell('I25').value = calc.totals.roundOff;
+    sh.getCell('I26').value = calc.totals.totalAmount;
+    sh.getCell('G28').value = calc.totals.totalInWords;
 
     await wb.xlsx.writeFile(xlsxPath);
 
@@ -155,7 +258,8 @@ export class DocumentService {
       contactPerson: enquiry.contactPerson || '',
       phone: enquiry.phone || '',
       email: enquiry.email || '',
-      items: enquiry.items,
+      items: calc.items,
+      totals: calc.totals,
       logoDataUrl,
     });
 
@@ -226,7 +330,7 @@ export class DocumentService {
       email: enquiry.email,
       status: 'GENERATED',
       remarks: enquiry.remarks,
-      items: enquiry.items,
+      items: calc.items,
       sheetFileId: fileId,
       sheetUrl,
       pdfUrl,
@@ -358,13 +462,25 @@ export class DocumentService {
     sh.getCell('B35').value = 'HDFC0004456';
     sh.getCell('B36').value = 'Bahubali Enclave, Delhi';
 
-    // Populate strictly Item Description & Quantity on alternating rows [16, 18, 20, 22, 24]
+    // Calculate items, prices, amounts, GST, and totals
+    const calc = await this.enrichItemsWithCalculations(order.items);
+
     const itemRows = [16, 18, 20, 22, 24];
-    order.items.slice(0, itemRows.length).forEach((item, idx) => {
+    calc.items.slice(0, itemRows.length).forEach((item, idx) => {
       const r = itemRows[idx];
       sh.getCell('A' + r).value = `${idx + 1}. ${item.description}`;
-      sh.getCell('G' + r).value = `${item.qty} Pcs`;
+      sh.getCell('F' + r).value = item.hsn || '84818090';
+      sh.getCell('G' + r).value = item.qty;
+      sh.getCell('H' + r).value = item.unitPrice || 0;
+      sh.getCell('I' + r).value = item.amount || 0;
     });
+
+    sh.getCell('I26').value = calc.totals.subTotal;
+    sh.getCell('I27').value = calc.totals.packingForwarding;
+    sh.getCell('I28').value = calc.totals.gstAmount;
+    sh.getCell('I29').value = calc.totals.roundOff;
+    sh.getCell('I30').value = calc.totals.totalAmount;
+    sh.getCell('G32').value = calc.totals.totalInWords;
 
     await wb.xlsx.writeFile(xlsxPath);
 
@@ -381,7 +497,8 @@ export class DocumentService {
       contactPerson: order.contactPerson || '',
       phone: order.phone || '',
       email: order.email || '',
-      items: order.items,
+      items: calc.items,
+      totals: calc.totals,
       logoDataUrl,
     });
 
@@ -454,7 +571,7 @@ export class DocumentService {
       purchaseOrder: order.reference || 'Verbal',
       orderDate: order.date || todayDateStr,
       remarks: order.remarks,
-      items: order.items,
+      items: calc.items,
       sheetFileId: fileId,
       sheetUrl,
       pdfUrl,
@@ -515,7 +632,7 @@ export class DocumentService {
     sh.getCell('I10').value = qtn.phone || '';
     sh.getCell('G11').value = qtn.email || '';
 
-    // Clear items table & populate description and qty only
+    // Clear items table & populate description, qty, price, amount
     for (let r = 14; r <= 20; r++) {
       sh.getCell('A' + r).value = '';
       sh.getCell('G' + r).value = '';
@@ -525,11 +642,22 @@ export class DocumentService {
     for (let r = 22; r <= 26; r++) sh.getCell('I' + r).value = '';
     sh.getCell('G28').value = '';
 
-    (qtn.items || []).slice(0, 7).forEach((item, idx) => {
+    const calc = await this.enrichItemsWithCalculations(qtn.items || []);
+
+    calc.items.slice(0, 7).forEach((item, idx) => {
       const row = 14 + idx;
       sh.getCell('A' + row).value = `${idx + 1}. ${item.description}`;
-      sh.getCell('G' + row).value = `${item.qty} Pcs`;
+      sh.getCell('G' + row).value = item.qty;
+      sh.getCell('H' + row).value = item.unitPrice || 0;
+      sh.getCell('I' + row).value = item.amount || 0;
     });
+
+    sh.getCell('I22').value = calc.totals.subTotal;
+    sh.getCell('I23').value = calc.totals.packingForwarding;
+    sh.getCell('I24').value = calc.totals.gstAmount;
+    sh.getCell('I25').value = calc.totals.roundOff;
+    sh.getCell('I26').value = calc.totals.totalAmount;
+    sh.getCell('G28').value = calc.totals.totalInWords;
 
     const uint8Array = await wb.xlsx.writeBuffer();
     return Buffer.from(uint8Array);
@@ -543,30 +671,50 @@ export class DocumentService {
 
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(config.piTemplatePath);
-    const sh = wb.getWorksheet('PI') || wb.worksheets[0];
+    const sh = wb.getWorksheet('PI') || wb.getWorksheet('Sheet1') || wb.worksheets[0];
 
     sh.getCell('I2').value = pi.id;
     sh.getCell('I3').value = pi.date;
 
     // Buyer
-    sh.getCell('A13').value = pi.customer;
-    sh.getCell('A14').value = pi.city || '';
-    sh.getCell('A15').value = pi.state || '';
-    sh.getCell('C17').value = pi.contactPerson || '';
-    sh.getCell('E17').value = pi.phone || '';
-    sh.getCell('C18').value = pi.email || '';
+    sh.getCell('F7').value = pi.customer;
+    sh.getCell('F9').value = pi.city || '';
+    sh.getCell('F10').value = pi.state || '';
+    sh.getCell('G12').value = pi.contactPerson || '';
+    sh.getCell('I12').value = pi.phone || '';
+    sh.getCell('G13').value = pi.email || '';
 
     // Clear items & populate
-    for (let r = 21; r <= 25; r++) {
-      sh.getCell('B' + r).value = '';
+    for (let r = 16; r <= 25; r++) {
+      sh.getCell('A' + r).value = '';
+      sh.getCell('F' + r).value = '';
       sh.getCell('G' + r).value = '';
+      sh.getCell('H' + r).value = '';
+      sh.getCell('I' + r).value = '';
     }
+    for (let r = 26; r <= 30; r++) {
+      sh.getCell('I' + r).value = '';
+    }
+    sh.getCell('G32').value = '';
 
-    (pi.items || []).slice(0, 5).forEach((item, idx) => {
-      const row = 21 + idx;
-      sh.getCell('B' + row).value = `${idx + 1}. ${item.description}`;
-      sh.getCell('G' + row).value = `${item.qty} Pcs`;
+    const calc = await this.enrichItemsWithCalculations(pi.items || []);
+    const itemRows = [16, 18, 20, 22, 24];
+
+    calc.items.slice(0, itemRows.length).forEach((item, idx) => {
+      const row = itemRows[idx];
+      sh.getCell('A' + row).value = `${idx + 1}. ${item.description}`;
+      sh.getCell('F' + row).value = item.hsn || '84818090';
+      sh.getCell('G' + row).value = item.qty;
+      sh.getCell('H' + row).value = item.unitPrice || 0;
+      sh.getCell('I' + row).value = item.amount || 0;
     });
+
+    sh.getCell('I26').value = calc.totals.subTotal;
+    sh.getCell('I27').value = calc.totals.packingForwarding;
+    sh.getCell('I28').value = calc.totals.gstAmount;
+    sh.getCell('I29').value = calc.totals.roundOff;
+    sh.getCell('I30').value = calc.totals.totalAmount;
+    sh.getCell('G32').value = calc.totals.totalInWords;
 
     const uint8Array = await wb.xlsx.writeBuffer();
     return Buffer.from(uint8Array);
@@ -578,6 +726,7 @@ export class DocumentService {
     const qtn = quotations.find((q) => q.id.toLowerCase() === docNo.toLowerCase());
     if (!qtn) return null;
 
+    const calc = await this.enrichItemsWithCalculations(qtn.items || []);
     const logoDataUrl = this.getLogoBase64();
     return this.generateQuotationHtml({
       docNo: qtn.id,
@@ -588,7 +737,8 @@ export class DocumentService {
       contactPerson: qtn.contactPerson || '',
       phone: qtn.phone || '',
       email: qtn.email || '',
-      items: qtn.items || [],
+      items: calc.items,
+      totals: calc.totals,
       logoDataUrl,
     });
   }
@@ -599,6 +749,7 @@ export class DocumentService {
     const pi = pis.find((p) => p.id.toLowerCase() === docNo.toLowerCase());
     if (!pi) return null;
 
+    const calc = await this.enrichItemsWithCalculations(pi.items || []);
     const logoDataUrl = this.getLogoBase64();
     return this.generatePIHtml({
       docNo: pi.id,
@@ -611,7 +762,8 @@ export class DocumentService {
       contactPerson: pi.contactPerson || '',
       phone: pi.phone || '',
       email: pi.email || '',
-      items: pi.items || [],
+      items: calc.items,
+      totals: calc.totals,
       logoDataUrl,
     });
   }
@@ -629,8 +781,23 @@ export class DocumentService {
     phone: string;
     email: string;
     items: DocumentItem[];
+    totals?: {
+      subTotal: number;
+      packingForwarding: number;
+      gstAmount: number;
+      roundOff: number;
+      totalAmount: number;
+      totalInWords: string;
+    };
     logoDataUrl: string;
   }): string {
+    const subTotal = data.totals ? data.totals.subTotal : data.items.reduce((s, it) => s + (it.amount || ((it.qty || 1) * (it.unitPrice || 0))), 0);
+    const packingForwarding = data.totals ? data.totals.packingForwarding : 0;
+    const gstAmount = data.totals ? data.totals.gstAmount : Math.round(subTotal * 0.18 * 100) / 100;
+    const totalAmount = data.totals ? data.totals.totalAmount : Math.round(subTotal + packingForwarding + gstAmount);
+    const roundOff = data.totals ? data.totals.roundOff : Math.round((totalAmount - (subTotal + packingForwarding + gstAmount)) * 100) / 100;
+    const totalInWords = data.totals ? data.totals.totalInWords : this.numberToIndianWords(totalAmount);
+
     const rowsHtml = data.items
       .slice(0, 7)
       .map(
@@ -638,8 +805,8 @@ export class DocumentService {
         <tr style="height: 28px; background-color: ${idx % 2 === 0 ? '#fff5eb' : '#ffffff'};">
           <td style="padding: 6px 12px; border: 1px solid #fed7aa; font-weight: 500;">${idx + 1}. ${it.description}</td>
           <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: center; font-weight: 600;">${it.qty} Pcs</td>
-          <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: right;"></td>
-          <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: right;"></td>
+          <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: right; font-weight: 600; font-family: monospace;">${it.unitPrice ? '₹ ' + it.unitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+          <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: right; font-weight: 700; color: #0f172a; font-family: monospace;">${it.amount ? '₹ ' + it.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
         </tr>
       `
       )
@@ -728,10 +895,10 @@ export class DocumentService {
   <table style="margin-bottom: 20px;">
     <thead>
       <tr style="background-color: #ea580c; color: #ffffff; text-align: left; height: 30px;">
-        <th style="padding: 6px 12px; width: 60%; font-size: 11px;">Item description</th>
-        <th style="padding: 6px 12px; width: 14%; text-align: center; font-size: 11px;">Quantity</th>
-        <th style="padding: 6px 12px; width: 13%; text-align: right; font-size: 11px;">Price</th>
-        <th style="padding: 6px 12px; width: 13%; text-align: right; font-size: 11px;">Amount</th>
+        <th style="padding: 6px 12px; width: 55%; font-size: 11px;">Item description</th>
+        <th style="padding: 6px 12px; width: 15%; text-align: center; font-size: 11px;">Quantity</th>
+        <th style="padding: 6px 12px; width: 15%; text-align: right; font-size: 11px;">Price (₹)</th>
+        <th style="padding: 6px 12px; width: 15%; text-align: right; font-size: 11px;">Amount (₹)</th>
       </tr>
     </thead>
     <tbody>
@@ -760,15 +927,30 @@ export class DocumentService {
       </td>
       <td style="width: 45%; vertical-align: top; text-align: right;">
         <table style="font-size: 11px; width: 100%;">
-          <tr><td style="text-align: right; padding: 4px 8px; color: #64748b;">Sub Total</td><td style="text-align: right; width: 90px; font-weight: 600;"></td></tr>
-          <tr><td style="text-align: right; padding: 4px 8px; color: #64748b;">Packing & Forwarding</td><td style="text-align: right;"></td></tr>
-          <tr><td style="text-align: right; padding: 4px 8px; color: #64748b;">GST @ 18%</td><td style="text-align: right;"></td></tr>
-          <tr><td style="text-align: right; padding: 4px 8px; color: #64748b;">Round off</td><td style="text-align: right;"></td></tr>
-          <tr style="border-top: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; font-weight: 700;">
+          <tr>
+            <td style="text-align: right; padding: 4px 8px; color: #64748b;">Sub Total</td>
+            <td style="text-align: right; width: 120px; font-weight: 600; color: #0f172a; font-family: monospace;">₹ ${subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td style="text-align: right; padding: 4px 8px; color: #64748b;">Packing & Forwarding</td>
+            <td style="text-align: right; color: #0f172a; font-family: monospace;">${packingForwarding > 0 ? '₹ ' + packingForwarding.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Nil'}</td>
+          </tr>
+          <tr>
+            <td style="text-align: right; padding: 4px 8px; color: #64748b;">GST @ 18%</td>
+            <td style="text-align: right; font-weight: 600; color: #0f172a; font-family: monospace;">₹ ${gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td style="text-align: right; padding: 4px 8px; color: #64748b;">Round off</td>
+            <td style="text-align: right; color: #64748b; font-family: monospace;">${roundOff >= 0 ? '+' : ''}${roundOff.toFixed(2)}</td>
+          </tr>
+          <tr style="border-top: 2px solid #ea580c; border-bottom: 2px solid #ea580c; font-weight: 800; font-size: 12px; color: #ea580c;">
             <td style="text-align: right; padding: 6px 8px;">Total</td>
-            <td style="text-align: right;"></td>
+            <td style="text-align: right; font-family: monospace;">₹ ${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
           </tr>
         </table>
+        <div style="margin-top: 8px; font-size: 9px; font-weight: 700; color: #ea580c; background: #fff7ed; padding: 6px 10px; border-radius: 4px; border: 1px solid #fed7aa; text-align: right;">
+          ${totalInWords}
+        </div>
       </td>
     </tr>
   </table>
@@ -801,18 +983,33 @@ export class DocumentService {
     phone: string;
     email: string;
     items: DocumentItem[];
+    totals?: {
+      subTotal: number;
+      packingForwarding: number;
+      gstAmount: number;
+      roundOff: number;
+      totalAmount: number;
+      totalInWords: string;
+    };
     logoDataUrl: string;
   }): string {
+    const subTotal = data.totals ? data.totals.subTotal : data.items.reduce((s, it) => s + (it.amount || ((it.qty || 1) * (it.unitPrice || 0))), 0);
+    const packingForwarding = data.totals ? data.totals.packingForwarding : 0;
+    const gstAmount = data.totals ? data.totals.gstAmount : Math.round(subTotal * 0.18 * 100) / 100;
+    const totalAmount = data.totals ? data.totals.totalAmount : Math.round(subTotal + packingForwarding + gstAmount);
+    const roundOff = data.totals ? data.totals.roundOff : Math.round((totalAmount - (subTotal + packingForwarding + gstAmount)) * 100) / 100;
+    const totalInWords = data.totals ? data.totals.totalInWords : this.numberToIndianWords(totalAmount);
+
     const rowsHtml = data.items
       .slice(0, 5)
       .map(
         (it, idx) => `
         <tr style="height: 32px; background-color: ${idx % 2 === 0 ? '#fff5eb' : '#ffffff'};">
           <td style="padding: 6px 12px; border: 1px solid #fed7aa; font-weight: 500;">${idx + 1}. ${it.description}</td>
-          <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: center;"></td>
+          <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: center; font-family: monospace; font-size: 10px;">${it.hsn || '84818090'}</td>
           <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: center; font-weight: 600;">${it.qty} Pcs</td>
-          <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: right;"></td>
-          <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: right;"></td>
+          <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: right; font-weight: 600; font-family: monospace;">${it.unitPrice ? '₹ ' + it.unitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+          <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: right; font-weight: 700; color: #0f172a; font-family: monospace;">${it.amount ? '₹ ' + it.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
         </tr>
       `
       )
@@ -903,11 +1100,11 @@ export class DocumentService {
   <table style="margin-bottom: 20px;">
     <thead>
       <tr style="background-color: #ea580c; color: #ffffff; text-align: left; height: 30px;">
-        <th style="padding: 6px 12px; width: 50%; font-size: 11px;">ITEM DESCRIPTION</th>
+        <th style="padding: 6px 12px; width: 46%; font-size: 11px;">ITEM DESCRIPTION</th>
         <th style="padding: 6px 12px; width: 14%; text-align: center; font-size: 11px;">HSN CODE</th>
         <th style="padding: 6px 12px; width: 12%; text-align: center; font-size: 11px;">QTY</th>
-        <th style="padding: 6px 12px; width: 12%; text-align: right; font-size: 11px;">PRICE</th>
-        <th style="padding: 6px 12px; width: 12%; text-align: right; font-size: 11px;">AMOUNT</th>
+        <th style="padding: 6px 12px; width: 14%; text-align: right; font-size: 11px;">PRICE</th>
+        <th style="padding: 6px 12px; width: 14%; text-align: right; font-size: 11px;">AMOUNT</th>
       </tr>
     </thead>
     <tbody>
@@ -937,15 +1134,30 @@ export class DocumentService {
       </td>
       <td style="width: 45%; vertical-align: top; text-align: right;">
         <table style="font-size: 11px; width: 100%;">
-          <tr><td style="text-align: right; padding: 4px 8px; color: #64748b;">Sub Total</td><td style="text-align: right; width: 90px; font-weight: 600;"></td></tr>
-          <tr><td style="text-align: right; padding: 4px 8px; color: #64748b;">Packing & Forwarding</td><td style="text-align: right;"></td></tr>
-          <tr><td style="text-align: right; padding: 4px 8px; color: #64748b;">GST @ 18%</td><td style="text-align: right;"></td></tr>
-          <tr><td style="text-align: right; padding: 4px 8px; color: #64748b;">Round Off</td><td style="text-align: right;"></td></tr>
-          <tr style="border-top: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; font-weight: 700;">
+          <tr>
+            <td style="text-align: right; padding: 4px 8px; color: #64748b;">Sub Total</td>
+            <td style="text-align: right; width: 120px; font-weight: 600; color: #0f172a; font-family: monospace;">₹ ${subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td style="text-align: right; padding: 4px 8px; color: #64748b;">Packing & Forwarding</td>
+            <td style="text-align: right; color: #0f172a; font-family: monospace;">${packingForwarding > 0 ? '₹ ' + packingForwarding.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Nil'}</td>
+          </tr>
+          <tr>
+            <td style="text-align: right; padding: 4px 8px; color: #64748b;">GST @ 18%</td>
+            <td style="text-align: right; font-weight: 600; color: #0f172a; font-family: monospace;">₹ ${gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td style="text-align: right; padding: 4px 8px; color: #64748b;">Round Off</td>
+            <td style="text-align: right; color: #64748b; font-family: monospace;">${roundOff >= 0 ? '+' : ''}${roundOff.toFixed(2)}</td>
+          </tr>
+          <tr style="border-top: 2px solid #ea580c; border-bottom: 2px solid #ea580c; font-weight: 800; font-size: 12px; color: #ea580c;">
             <td style="text-align: right; padding: 6px 8px;">Total</td>
-            <td style="text-align: right;"></td>
+            <td style="text-align: right; font-family: monospace;">₹ ${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
           </tr>
         </table>
+        <div style="margin-top: 8px; font-size: 9px; font-weight: 700; color: #ea580c; background: #fff7ed; padding: 6px 10px; border-radius: 4px; border: 1px solid #fed7aa; text-align: right;">
+          ${totalInWords}
+        </div>
       </td>
     </tr>
   </table>

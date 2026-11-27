@@ -39,11 +39,15 @@ function parseItemsSummary(summary: string): DocumentItem[] {
   const items: DocumentItem[] = [];
   for (const part of parts) {
     if (!part.trim()) continue;
-    const match = part.match(/^(.*?)\s*\|\s*Qty:\s*(\d+(?:\.\d+)?)/i);
+    const match = part.match(/^(.*?)\s*\|\s*Qty:\s*(\d+(?:\.\d+)?)(?:\s*\|\s*Rate:\s*(\d+(?:\.\d+)?))?/i);
     if (match) {
+      const qty = parseFloat(match[2]);
+      const unitPrice = match[3] ? parseFloat(match[3]) : undefined;
       items.push({
         description: match[1].trim(),
-        qty: parseFloat(match[2]),
+        qty,
+        unitPrice,
+        amount: unitPrice ? qty * unitPrice : undefined,
       });
     } else {
       items.push({
@@ -510,7 +514,7 @@ export class SheetsService {
         status: currentStatus,
         remarks: clean(row.getCell(11).value),
         items,
-        allSummary: items.map((it) => `${it.description} | Qty: ${it.qty}`).join(' ; '),
+        allSummary: items.map((it) => `${it.description} | Qty: ${it.qty}${it.unitPrice ? ` | Rate: ${it.unitPrice}` : ''}`).join(' ; '),
       };
 
       if (
@@ -589,7 +593,7 @@ export class SheetsService {
       enqId = await SequenceService.getNextEnquiryNumber(maxNum);
     }
 
-    const summaryStr = data.items.map((it) => `${it.description.trim()} | Qty: ${it.qty}`).join(' ; ');
+    const summaryStr = data.items.map((it) => `${it.description.trim()} | Qty: ${it.qty}${it.unitPrice ? ` | Rate: ${it.unitPrice}` : ''}`).join(' ; ');
     const enqDate = data.date || new Date().toISOString().split('T')[0];
     const status = data.status || 'Open';
 
@@ -775,7 +779,7 @@ export class SheetsService {
         reference: clean(row.getCell(14).value),
         remarks: clean(row.getCell(165).value),
         items,
-        allSummary: items.map((it) => `${it.description} | Qty: ${it.qty}`).join(' ; '),
+        allSummary: items.map((it) => `${it.description} | Qty: ${it.qty}${it.unitPrice ? ` | Rate: ${it.unitPrice}` : ''}`).join(' ; '),
       };
 
       if (!s || order.id.toLowerCase().includes(s) || order.customer.toLowerCase().includes(s)) {
@@ -808,7 +812,7 @@ export class SheetsService {
 
     const orderId = await SequenceService.getNextOrderNumber(maxOrd);
     const orderDate = new Date().toISOString().split('T')[0];
-    const summaryStr = enquiry.items.map((it) => `${it.description} | Qty: ${it.qty}`).join(' ; ');
+    const summaryStr = enquiry.items.map((it) => `${it.description} | Qty: ${it.qty}${it.unitPrice ? ` | Rate: ${it.unitPrice}` : ''}`).join(' ; ');
 
     const sheet = this.workbook!.getWorksheet('ORDERS');
     const itemsSheet = this.workbook!.getWorksheet('ORDER_ITEMS');
@@ -962,7 +966,7 @@ export class SheetsService {
         remarks: clean(row.getCell(12).value),
         reference: clean(row.getCell(13).value),
         items,
-        allSummary: items.map((it) => `${it.description} | Qty: ${it.qty}`).join(' ; '),
+        allSummary: items.map((it) => `${it.description} | Qty: ${it.qty}${it.unitPrice ? ` | Rate: ${it.unitPrice}` : ''}`).join(' ; '),
       };
 
       if (!s || qtn.id.toLowerCase().includes(s) || qtn.customer.toLowerCase().includes(s)) {
@@ -979,7 +983,7 @@ export class SheetsService {
     const itemsSheet = this.workbook!.getWorksheet('QUOTATION_ITEMS');
     if (!sheet) throw new Error('Sheet QUOTATIONS not found');
 
-    const summaryStr = qtn.items.map((it) => `${it.description} | Qty: ${it.qty}`).join(' ; ');
+    const summaryStr = qtn.items.map((it) => `${it.description} | Qty: ${it.qty}${it.unitPrice ? ` | Rate: ${it.unitPrice}` : ''}`).join(' ; ');
     const rowValues: any[] = [
       qtn.id,
       qtn.date,
@@ -1084,7 +1088,7 @@ export class SheetsService {
         purchaseOrder: clean(row.getCell(17).value),
         orderDate: clean(row.getCell(18).value),
         items,
-        allSummary: items.map((it) => `${it.description} | Qty: ${it.qty}`).join(' ; '),
+        allSummary: items.map((it) => `${it.description} | Qty: ${it.qty}${it.unitPrice ? ` | Rate: ${it.unitPrice}` : ''}`).join(' ; '),
       };
 
       if (!s || pi.id.toLowerCase().includes(s) || pi.customer.toLowerCase().includes(s)) {
@@ -1101,7 +1105,7 @@ export class SheetsService {
     const itemsSheet = this.workbook!.getWorksheet('PI_ITEMS');
     if (!sheet) throw new Error('Sheet PI not found');
 
-    const summaryStr = pi.items.map((it) => `${it.description} | Qty: ${it.qty}`).join(' ; ');
+    const summaryStr = pi.items.map((it) => `${it.description} | Qty: ${it.qty}${it.unitPrice ? ` | Rate: ${it.unitPrice}` : ''}`).join(' ; ');
     const rowValues: any[] = [
       pi.id,
       pi.date,

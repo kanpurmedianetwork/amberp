@@ -35,6 +35,9 @@ export interface Product {
 export interface DocumentItem {
   description: string;
   qty: number;
+  unitPrice?: number;
+  amount?: number;
+  hsn?: string;
 }
 
 export interface Enquiry {
