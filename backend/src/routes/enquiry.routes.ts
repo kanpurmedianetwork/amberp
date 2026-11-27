@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { SheetsService } from '../services/sheets.service';
+import { AuditService } from '../services/audit.service';
 import { authMiddleware, requireRole, AuthenticatedRequest } from '../middleware/auth.middleware';
 
 export const enquiryRouter = Router();
@@ -51,6 +52,18 @@ enquiryRouter.post('/', authMiddleware, requireRole(['ADMIN', 'SALES']), async (
       items,
     });
 
+    const ip = AuditService.getClientIp(req);
+    const userAgent = req.headers['user-agent'] || 'Unknown Device';
+    AuditService.recordEdit({
+      user: req.user!,
+      ip,
+      action: 'CREATE',
+      entityType: 'ENQUIRY',
+      entityId: enquiry.id,
+      details: `Created Enquiry for ${enquiry.customer} with ${enquiry.items.length} item(s)`,
+      userAgent,
+    }).catch(() => {});
+
     res.status(201).json({ enquiry, message: `Enquiry ${enquiry.id} created successfully.` });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to save enquiry.' });
@@ -63,6 +76,19 @@ enquiryRouter.put('/:id', authMiddleware, requireRole(['ADMIN', 'SALES']), async
       id: req.params.id,
       ...req.body,
     });
+
+    const ip = AuditService.getClientIp(req);
+    const userAgent = req.headers['user-agent'] || 'Unknown Device';
+    AuditService.recordEdit({
+      user: req.user!,
+      ip,
+      action: 'UPDATE',
+      entityType: 'ENQUIRY',
+      entityId: enquiry.id,
+      details: `Updated Enquiry for ${enquiry.customer}`,
+      userAgent,
+    }).catch(() => {});
+
     res.json({ enquiry, message: `Enquiry ${enquiry.id} updated successfully.` });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to update enquiry.' });

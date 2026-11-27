@@ -15,6 +15,7 @@ import {
   Settings,
   LogOut,
   Flame,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
 
@@ -27,6 +28,7 @@ const navItems = [
   { name: 'Quotations', href: '/quotations', icon: FileText },
   { name: 'Proforma Invoices', href: '/pi', icon: Receipt },
   { name: 'Document History', href: '/documents', icon: History },
+  { name: 'Admin & Audit Hub', href: '/admin', icon: ShieldCheck, adminOnly: true },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
@@ -46,6 +48,8 @@ export function Sidebar() {
         return 'bg-slate-100 text-slate-800 border-slate-300';
     }
   };
+
+  const visibleNavItems = navItems.filter((item) => !item.adminOnly || user?.role === 'ADMIN');
 
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 text-slate-300 flex flex-col flex-shrink-0 h-screen sticky top-0">
@@ -69,10 +73,12 @@ export function Sidebar() {
         <div className="px-3 py-1.5 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
           Operations
         </div>
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
           const Icon = item.icon;
-          return (
+          const visibleNavItems = navItems.filter((item) => !item.adminOnly || user?.role === 'ADMIN');
+
+  return (
             <Link
               key={item.name}
               href={item.href}

@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { SheetsService } from '../services/sheets.service';
 import { DocumentService } from '../services/document.service';
+import { AuditService } from '../services/audit.service';
 import { authMiddleware, requireRole, AuthenticatedRequest } from '../middleware/auth.middleware';
 
 export const piRouter = Router();
@@ -22,6 +23,17 @@ piRouter.post('/generate', authMiddleware, requireRole(['ADMIN', 'OPERATIONS']),
       return res.status(400).json({ error: 'Source orderId is required.' });
     }
     const result = await DocumentService.generatePI(orderId);
+    const ip = AuditService.getClientIp(req);
+    const userAgent = req.headers['user-agent'] || 'Unknown Device';
+    AuditService.recordEdit({
+      user: req.user!,
+      ip,
+      action: 'GENERATE',
+      entityType: 'PI',
+      entityId: result.docNo,
+      details: `Generated Proforma Invoice ${result.docNo} from order/quotation ${orderId}`,
+      userAgent,
+    }).catch(() => {});
     res.status(201).json({
       message: `Proforma Invoice ${result.docNo} generated successfully.`,
       ...result,

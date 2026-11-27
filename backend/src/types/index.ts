@@ -146,3 +146,52 @@ export interface DashboardStats {
   nextOrderNo: string;
   nextPINo: string;
 }
+
+export interface ExportLogEntry {
+  id: string;
+  timestamp: string;
+  userEmail: string;
+  userName: string;
+  userRole: UserRole;
+  ipAddress: string;
+  exportType: string;
+  format: 'XLSX' | 'JSON' | 'CSV';
+  recordsCount: number;
+  fileSize: string;
+  userAgent: string;
+}
+
+export interface LoginLogEntry {
+  id: string;
+  timestamp: string;
+  userEmail: string;
+  userName: string;
+  userRole: UserRole;
+  ipAddress: string;
+  previousIp?: string;
+  ipChanged: boolean;
+  userAgent: string;
+  status: 'SUCCESS' | 'FAILED' | 'BLOCKED';
+}
+
+export interface EditLogEntry {
+  id: string;
+  timestamp: string;
+  userEmail: string;
+  userName: string;
+  userRole: UserRole;
+  ipAddress: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'GENERATE' | 'STATUS_CHANGE';
+  entityType: 'ENQUIRY' | 'CUSTOMER' | 'PRODUCT' | 'QUOTATION' | 'PI' | 'ORDER';
+  entityId: string;
+  details: string;
+  userAgent: string;
+}
+
+export interface AuditStats {
+  totalExports: number;
+  totalLogins: number;
+  ipChangesCount: number;
+  totalEdits: number;
+  uniqueIps: number;
+}

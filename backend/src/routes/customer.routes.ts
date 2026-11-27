@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { SheetsService } from '../services/sheets.service';
+import { AuditService } from '../services/audit.service';
 import { authMiddleware, requireRole, AuthenticatedRequest } from '../middleware/auth.middleware';
 
 export const customerRouter = Router();
@@ -42,6 +43,19 @@ customerRouter.post('/', authMiddleware, requireRole(['ADMIN', 'SALES']), async 
       state,
       notes,
     });
+
+    const ip = AuditService.getClientIp(req);
+    const userAgent = req.headers['user-agent'] || 'Unknown Device';
+    AuditService.recordEdit({
+      user: req.user!,
+      ip,
+      action: 'CREATE',
+      entityType: 'CUSTOMER',
+      entityId: customer.id,
+      details: `Created customer record for ${customer.name} (${customer.city || ''})`,
+      userAgent,
+    }).catch(() => {});
+
     res.status(201).json({ customer, message: 'Customer created successfully.' });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to save customer.' });

@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { SheetsService } from '../services/sheets.service';
+import { AuditService } from '../services/audit.service';
 import { authMiddleware, requireRole, AuthenticatedRequest } from '../middleware/auth.middleware';
 
 export const productRouter = Router();
@@ -22,6 +23,17 @@ productRouter.post('/', authMiddleware, requireRole(['ADMIN']), async (req: Auth
       return res.status(400).json({ error: 'Product description is required.' });
     }
     const product = await SheetsService.saveProduct({ description, notes, active });
+    const ip = AuditService.getClientIp(req);
+    const userAgent = req.headers['user-agent'] || 'Unknown Device';
+    AuditService.recordEdit({
+      user: req.user!,
+      ip,
+      action: 'CREATE',
+      entityType: 'PRODUCT',
+      entityId: product.id,
+      details: `Created product "${product.description}"`,
+      userAgent,
+    }).catch(() => {});
     res.status(201).json({ product, message: 'Product created successfully.' });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to create product.' });

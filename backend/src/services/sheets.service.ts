@@ -62,7 +62,7 @@ function parseItemsSummary(summary: string): DocumentItem[] {
 }
 
 export class SheetsService {
-  private static workbook: ExcelJS.Workbook | null = null;
+  public static workbook: ExcelJS.Workbook | null = null;
   private static isInitialized = false;
   private static googleSheetsApi: sheets_v4.Sheets | null = null;
 

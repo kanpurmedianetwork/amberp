@@ -12,6 +12,7 @@ import { quotationRouter } from './routes/quotation.routes';
 import { piRouter } from './routes/pi.routes';
 import { documentRouter } from './routes/document.routes';
 import { settingsRouter } from './routes/settings.routes';
+import { adminRouter } from './routes/admin.routes';
 
 const app = express();
 
@@ -67,6 +68,7 @@ app.use('/api/quotations', quotationRouter);
 app.use('/api/pi', piRouter);
 app.use('/api/documents', documentRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/admin', adminRouter);
 
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
