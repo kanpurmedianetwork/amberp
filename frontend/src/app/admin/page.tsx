@@ -28,7 +28,7 @@ import { ExportLogEntry, LoginLogEntry, EditLogEntry, AuditStats } from '../../t
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export default function AdminAuditPage() {
-  const { user, token } = useAuth();
+  const { user, token, isLoading } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
 
   const [activeTab, setActiveTab] = useState<'export' | 'exportHistory' | 'logins' | 'edits'>('export');
@@ -47,11 +47,12 @@ export default function AdminAuditPage() {
     if (!isAdmin) return;
     setLoading(true);
     try {
+      const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('ambica_token') : null);
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+      if (activeToken) {
+        headers['Authorization'] = `Bearer ${activeToken}`;
       }
 
       const [statsRes, exportsRes, loginsRes, editsRes] = await Promise.all([
@@ -93,11 +94,15 @@ export default function AdminAuditPage() {
   const handleDownload = async (url: string, filename: string, typeKey: string) => {
     setDownloading(typeKey);
     try {
+      const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('ambica_token') : null);
       const headers: Record<string, string> = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+      let fetchUrl = url;
+      if (activeToken) {
+        headers['Authorization'] = `Bearer ${activeToken}`;
+        const separator = fetchUrl.includes('?') ? '&' : '?';
+        fetchUrl = `${fetchUrl}${separator}token=${encodeURIComponent(activeToken)}`;
       }
-      const res = await fetch(url, { headers });
+      const res = await fetch(fetchUrl, { headers });
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.error || `Download failed with status ${res.status}`);
@@ -119,6 +124,21 @@ export default function AdminAuditPage() {
       setDownloading(null);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div>
+        <Header title="Security & Audit Hub" subtitle="Verifying administrator credentials..." />
+        <main className="p-12 max-w-xl mx-auto mt-12 bg-white rounded-lg border border-slate-200 shadow-sm text-center space-y-4">
+          <RefreshCw className="w-8 h-8 text-orange-600 animate-spin mx-auto" />
+          <h2 className="text-sm font-semibold text-slate-800">Authenticating Session</h2>
+          <p className="text-xs text-slate-500">
+            Validating employee credentials and administrative RBAC authorizations...
+          </p>
+        </main>
+      </div>
+    );
+  }
 
   if (!isAdmin) {
     return (

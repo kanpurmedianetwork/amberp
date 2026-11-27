@@ -7,12 +7,18 @@ export interface AuthenticatedRequest extends Request {
 }
 
 export function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  let token = '';
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authentication required. Missing Bearer token.' });
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7).trim();
+  } else if (req.query.token && typeof req.query.token === 'string') {
+    token = req.query.token.trim();
   }
 
-  const token = authHeader.substring(7).trim();
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required. Missing Bearer token or token query parameter.' });
+  }
+
   try {
     const user = AuthService.verifySessionToken(token);
     req.user = user;
