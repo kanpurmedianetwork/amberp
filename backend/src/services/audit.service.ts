@@ -36,146 +36,19 @@ export class AuditService {
         this.loginLogs = parsed.loginLogs || [];
         this.editLogs = parsed.editLogs || [];
       } else {
-        // Seed initial audit trail
-        this.seedInitialLogs();
+        this.exportLogs = [];
+        this.loginLogs = [];
+        this.editLogs = [];
         this.saveToDisk();
       }
     } catch (e: any) {
       console.warn('[AuditService] Storage load error (using memory cache):', e.message);
-      this.seedInitialLogs();
+      this.exportLogs = [];
+      this.loginLogs = [];
+      this.editLogs = [];
     }
 
     this.isInitialized = true;
-  }
-
-  private static seedInitialLogs() {
-    const now = new Date();
-    const tMinus10m = new Date(now.getTime() - 10 * 60 * 1000).toISOString();
-    const tMinus1h = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
-    const tMinus2h = new Date(now.getTime() - 120 * 60 * 1000).toISOString();
-    const tMinus1d = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-
-    this.loginLogs = [
-      {
-        id: 'LOG-0001',
-        timestamp: tMinus10m,
-        userEmail: 'mohit@ambicaengineers.in',
-        userName: 'Mohit AbhayRaj Chhajer',
-        userRole: 'ADMIN',
-        ipAddress: '103.21.124.89',
-        previousIp: '122.161.45.12',
-        ipChanged: true,
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0',
-        status: 'SUCCESS',
-      },
-      {
-        id: 'LOG-0002',
-        timestamp: tMinus1h,
-        userEmail: 'akshay@ambicaengineers.in',
-        userName: 'Akshay Chhajer',
-        userRole: 'SALES',
-        ipAddress: '122.161.45.12',
-        previousIp: '122.161.45.12',
-        ipChanged: false,
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0',
-        status: 'SUCCESS',
-      },
-      {
-        id: 'LOG-0003',
-        timestamp: tMinus2h,
-        userEmail: 'jineshjain@ambicaengineers.in',
-        userName: 'Jinesh Jain',
-        userRole: 'OPERATIONS',
-        ipAddress: '49.36.182.44',
-        previousIp: '182.72.10.85',
-        ipChanged: true,
-        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1',
-        status: 'SUCCESS',
-      },
-      {
-        id: 'LOG-0004',
-        timestamp: tMinus1d,
-        userEmail: 'mohit@ambicaengineers.in',
-        userName: 'Mohit AbhayRaj Chhajer',
-        userRole: 'ADMIN',
-        ipAddress: '122.161.45.12',
-        previousIp: '',
-        ipChanged: false,
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/119.0',
-        status: 'SUCCESS',
-      },
-    ];
-
-    this.exportLogs = [
-      {
-        id: 'EXP-0001',
-        timestamp: tMinus1h,
-        userEmail: 'mohit@ambicaengineers.in',
-        userName: 'Mohit AbhayRaj Chhajer',
-        userRole: 'ADMIN',
-        ipAddress: '103.21.124.89',
-        exportType: 'FULL_EXCEL_WORKBOOK',
-        format: 'XLSX',
-        recordsCount: 167,
-        fileSize: '1.28 MB',
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0',
-      },
-      {
-        id: 'EXP-0002',
-        timestamp: tMinus2h,
-        userEmail: 'mohit@ambicaengineers.in',
-        userName: 'Mohit AbhayRaj Chhajer',
-        userRole: 'ADMIN',
-        ipAddress: '103.21.124.89',
-        exportType: 'CUSTOMERS_CSV',
-        format: 'CSV',
-        recordsCount: 45,
-        fileSize: '18.4 KB',
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0',
-      },
-    ];
-
-    this.editLogs = [
-      {
-        id: 'EDT-0001',
-        timestamp: tMinus10m,
-        userEmail: 'mohit@ambicaengineers.in',
-        userName: 'Mohit AbhayRaj Chhajer',
-        userRole: 'ADMIN',
-        ipAddress: '103.21.124.89',
-        action: 'UPDATE',
-        entityType: 'ENQUIRY',
-        entityId: 'ENR-002822',
-        details: 'Updated customer remarks & verified 8-digit HSN code 84799090',
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0',
-      },
-      {
-        id: 'EDT-0002',
-        timestamp: tMinus1h,
-        userEmail: 'akshay@ambicaengineers.in',
-        userName: 'Akshay Chhajer',
-        userRole: 'SALES',
-        ipAddress: '122.161.45.12',
-        action: 'GENERATE',
-        entityType: 'QUOTATION',
-        entityId: 'AELPL/26-27/191',
-        details: 'Generated quotation for Altima Decorative with 2 items',
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0',
-      },
-      {
-        id: 'EDT-0003',
-        timestamp: tMinus2h,
-        userEmail: 'jineshjain@ambicaengineers.in',
-        userName: 'Jinesh Jain',
-        userRole: 'OPERATIONS',
-        ipAddress: '49.36.182.44',
-        action: 'CREATE',
-        entityType: 'ENQUIRY',
-        entityId: 'ENR-002821',
-        details: 'Logged new RFQ for Century Plyboards with Cushion Press Pads',
-        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1',
-      },
-    ];
   }
 
   private static saveToDisk(): void {
