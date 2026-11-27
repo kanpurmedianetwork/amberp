@@ -68,6 +68,27 @@ export class DocumentService {
     return `INR- ${inWords(rounded).trim().replace(/\s+/g, ' ')} ONLY`;
   }
 
+  public static getSuggestedHsn(desc: string): string {
+    const d = (desc || '').toLowerCase();
+    if (d.includes('valve') || d.includes('poppet') || d.includes('cock') || d.includes('solenoid')) return '84818090';
+    if (d.includes('pump') || d.includes('scy') || d.includes('cartridge kit') || d.includes('vane')) return '84139190';
+    if (d.includes('cylinder') || d.includes('actuator') || d.includes('hydro')) return '84122100';
+    if (d.includes('filter') || d.includes('element')) return '84212900';
+    if (d.includes('seal') || d.includes('o-ring')) return '40169320';
+    if (d.includes('sensor') || d.includes('transducer') || d.includes('gauge')) return '90262000';
+    if (d.includes('plate') || d.includes('mould') || d.includes('blade')) return '84799090';
+    if (d.includes('pad') || d.includes('cushion')) return '84799090';
+    return '84799090'; // 8-digit standard for machinery parts & accessories
+  }
+
+  public static resolveHsn(hsn?: string, desc?: string): string {
+    const h = (hsn || '').trim();
+    if (h && h.length >= 6 && h !== '8479') {
+      return h;
+    }
+    return DocumentService.getSuggestedHsn(desc || '');
+  }
+
   public static async enrichItemsWithCalculations(items: DocumentItem[]): Promise<{
     items: DocumentItem[];
     totals: {
@@ -84,7 +105,7 @@ export class DocumentService {
 
     const enriched: DocumentItem[] = (items || []).map((it) => {
       let unitPrice = it.unitPrice || 0;
-      const hsn = it.hsn || (it.description && it.description.toLowerCase().includes('valve') ? '84818090' : '8479');
+      const hsn = DocumentService.resolveHsn(it.hsn, it.description);
 
       if (!unitPrice || unitPrice === 0) {
         const itemClean = cleanStr(it.description);
@@ -469,7 +490,7 @@ export class DocumentService {
     calc.items.slice(0, itemRows.length).forEach((item, idx) => {
       const r = itemRows[idx];
       sh.getCell('A' + r).value = `${idx + 1}. ${item.description}`;
-      sh.getCell('F' + r).value = item.hsn || '84818090';
+      sh.getCell('F' + r).value = DocumentService.resolveHsn(item.hsn, item.description);
       sh.getCell('G' + r).value = item.qty;
       sh.getCell('H' + r).value = item.unitPrice || 0;
       sh.getCell('I' + r).value = item.amount || 0;
@@ -703,7 +724,7 @@ export class DocumentService {
     calc.items.slice(0, itemRows.length).forEach((item, idx) => {
       const row = itemRows[idx];
       sh.getCell('A' + row).value = `${idx + 1}. ${item.description}`;
-      sh.getCell('F' + row).value = item.hsn || '84818090';
+      sh.getCell('F' + row).value = DocumentService.resolveHsn(item.hsn, item.description);
       sh.getCell('G' + row).value = item.qty;
       sh.getCell('H' + row).value = item.unitPrice || 0;
       sh.getCell('I' + row).value = item.amount || 0;
@@ -804,6 +825,7 @@ export class DocumentService {
         (it, idx) => `
         <tr style="height: 28px; background-color: ${idx % 2 === 0 ? '#fff5eb' : '#ffffff'};">
           <td style="padding: 6px 12px; border: 1px solid #fed7aa; font-weight: 500;">${idx + 1}. ${it.description}</td>
+          <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: center; font-family: monospace; font-size: 10px; font-weight: 600;">${DocumentService.resolveHsn(it.hsn, it.description)}</td>
           <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: center; font-weight: 600;">${it.qty} Pcs</td>
           <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: right; font-weight: 600; font-family: monospace;">${it.unitPrice ? '₹ ' + it.unitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
           <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: right; font-weight: 700; color: #0f172a; font-family: monospace;">${it.amount ? '₹ ' + it.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
@@ -817,6 +839,7 @@ export class DocumentService {
     for (let i = data.items.length; i < 7; i++) {
       emptyRowsHtml += `
         <tr style="height: 28px; background-color: ${i % 2 === 0 ? '#fff5eb' : '#ffffff'};">
+          <td style="padding: 6px 12px; border: 1px solid #fed7aa;">&nbsp;</td>
           <td style="padding: 6px 12px; border: 1px solid #fed7aa;">&nbsp;</td>
           <td style="padding: 6px 12px; border: 1px solid #fed7aa;">&nbsp;</td>
           <td style="padding: 6px 12px; border: 1px solid #fed7aa;">&nbsp;</td>
@@ -895,8 +918,9 @@ export class DocumentService {
   <table style="margin-bottom: 20px;">
     <thead>
       <tr style="background-color: #ea580c; color: #ffffff; text-align: left; height: 30px;">
-        <th style="padding: 6px 12px; width: 55%; font-size: 11px;">Item description</th>
-        <th style="padding: 6px 12px; width: 15%; text-align: center; font-size: 11px;">Quantity</th>
+        <th style="padding: 6px 12px; width: 44%; font-size: 11px;">Item description</th>
+        <th style="padding: 6px 12px; width: 14%; text-align: center; font-size: 11px;">HSN Code</th>
+        <th style="padding: 6px 12px; width: 12%; text-align: center; font-size: 11px;">Quantity</th>
         <th style="padding: 6px 12px; width: 15%; text-align: right; font-size: 11px;">Price (₹)</th>
         <th style="padding: 6px 12px; width: 15%; text-align: right; font-size: 11px;">Amount (₹)</th>
       </tr>
@@ -1006,7 +1030,7 @@ export class DocumentService {
         (it, idx) => `
         <tr style="height: 32px; background-color: ${idx % 2 === 0 ? '#fff5eb' : '#ffffff'};">
           <td style="padding: 6px 12px; border: 1px solid #fed7aa; font-weight: 500;">${idx + 1}. ${it.description}</td>
-          <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: center; font-family: monospace; font-size: 10px;">${it.hsn || '84818090'}</td>
+          <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: center; font-family: monospace; font-size: 10px; font-weight: 600;">${DocumentService.resolveHsn(it.hsn, it.description)}</td>
           <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: center; font-weight: 600;">${it.qty} Pcs</td>
           <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: right; font-weight: 600; font-family: monospace;">${it.unitPrice ? '₹ ' + it.unitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
           <td style="padding: 6px 12px; border: 1px solid #fed7aa; text-align: right; font-weight: 700; color: #0f172a; font-family: monospace;">${it.amount ? '₹ ' + it.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>

@@ -23,6 +23,19 @@ import { apiRequest } from '../../../lib/api';
 import { Customer, Product, DocumentItem, DashboardStats } from '../../../types';
 import { useAuth } from '../../../lib/auth-context';
 
+function getSuggestedHsn(desc: string): string {
+  const d = (desc || '').toLowerCase();
+  if (d.includes('valve') || d.includes('poppet') || d.includes('cock') || d.includes('solenoid')) return '84818090';
+  if (d.includes('pump') || d.includes('scy') || d.includes('cartridge kit') || d.includes('vane')) return '84139190';
+  if (d.includes('cylinder') || d.includes('actuator') || d.includes('hydro')) return '84122100';
+  if (d.includes('filter') || d.includes('element')) return '84212900';
+  if (d.includes('seal') || d.includes('o-ring')) return '40169320';
+  if (d.includes('sensor') || d.includes('transducer') || d.includes('gauge')) return '90262000';
+  if (d.includes('plate') || d.includes('mould') || d.includes('blade')) return '84799090';
+  if (d.includes('pad') || d.includes('cushion')) return '84799090';
+  return '84799090';
+}
+
 export default function NewEnquiryPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -43,9 +56,9 @@ export default function NewEnquiryPage() {
   const [reference, setReference] = useState('');
   const [remarks, setRemarks] = useState('');
 
-  // Strict Item Entry: Description and Quantity ONLY
+  // Item Entry with Auto HSN and Pricing
   const [items, setItems] = useState<DocumentItem[]>([
-    { description: '', qty: 1 },
+    { description: '', qty: 1, hsn: '84799090' },
   ]);
 
   const [loading, setLoading] = useState(false);
@@ -82,7 +95,7 @@ export default function NewEnquiryPage() {
   };
 
   const handleAddItem = () => {
-    setItems([...items, { description: '', qty: 1 }]);
+    setItems([...items, { description: '', qty: 1, hsn: '84799090' }]);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -107,6 +120,9 @@ export default function NewEnquiryPage() {
           current.amount = (current.qty || 1) * price;
         }
       }
+      current.hsn = getSuggestedHsn(value);
+    } else if (field === 'hsn') {
+      current.hsn = String(value || '').trim();
     } else if (field === 'qty') {
       const q = typeof value === 'number' ? value : parseInt(value, 10) || 1;
       current.qty = q;
@@ -384,6 +400,19 @@ export default function NewEnquiryPage() {
                       value={it.description}
                       onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
                       className="w-full px-3 py-1.5 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-orange-500 bg-white"
+                    />
+                  </div>
+
+                  <div className="w-full sm:w-28">
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1 text-center">
+                      HSN Code
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="84799090"
+                      value={it.hsn || ''}
+                      onChange={(e) => handleItemChange(idx, 'hsn', e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs font-mono text-center focus:ring-1 focus:ring-orange-500 bg-white font-medium"
                     />
                   </div>
 
