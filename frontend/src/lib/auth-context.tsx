@@ -71,6 +71,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const syncSessionIp = async (sToken?: string | null, activeUser?: UserProfile | null) => {
+    try {
+      const activeTok = sToken || (typeof window !== 'undefined' ? localStorage.getItem('ambica_token') : null);
+      await apiRequest('/auth/session', {
+        method: 'POST',
+        body: JSON.stringify({
+          token: activeTok,
+          email: activeUser?.email,
+          user: activeUser,
+        }),
+      });
+    } catch {}
+  };
+
   // Listen to Firebase Auth state
   useEffect(() => {
     let unsubscribe = () => {};
@@ -100,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           localStorage.setItem('ambica_token', sessionToken);
           localStorage.setItem('ambica_user', JSON.stringify(profile));
           setIsLoading(false);
+          syncSessionIp(sessionToken, profile);
         }
       });
     } catch (err) {
@@ -111,8 +126,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (savedToken && savedUser) {
       try {
+        const parsed = JSON.parse(savedUser);
         setToken(savedToken);
-        setUser(JSON.parse(savedUser));
+        setUser(parsed);
+        syncSessionIp(savedToken, parsed);
       } catch {
         localStorage.removeItem('ambica_token');
         localStorage.removeItem('ambica_user');
@@ -136,11 +153,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(res.user);
       localStorage.setItem('ambica_token', res.token);
       localStorage.setItem('ambica_user', JSON.stringify(res.user));
+      syncSessionIp(res.token, res.user);
     } catch (err: any) {
       console.error('Failed to log in as:', email, err);
       const emp = PRECONFIGURED_EMPLOYEES.find((e) => e.email === email) || PRECONFIGURED_EMPLOYEES[0];
       const fallbackUser: UserProfile = { email: emp.email, name: emp.name, role: emp.role };
       setUser(fallbackUser);
+      syncSessionIp(null, fallbackUser);
     } finally {
       setIsLoading(false);
     }
@@ -173,6 +192,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(profile);
       localStorage.setItem('ambica_token', sessionToken);
       localStorage.setItem('ambica_user', JSON.stringify(profile));
+      syncSessionIp(sessionToken, profile);
     } catch (err: any) {
       console.error('Firebase Email/Password sign in failed:', err);
       throw err;

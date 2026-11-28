@@ -45,4 +45,30 @@ export class FirestoreService {
       console.warn(`[Firestore] Failed to sync document to ${collectionName}/${id}:`, err.message);
     }
   }
+
+  public static async getAuditLogsFromDocLogs(): Promise<{
+    logins: any[];
+    exports: any[];
+    edits: any[];
+  }> {
+    const result = { logins: [] as any[], exports: [] as any[], edits: [] as any[] };
+    try {
+      await this.init();
+      if (!this.db) return result;
+      const snap = await getDocs(collection(this.db, 'docLogs'));
+      snap.forEach((d) => {
+        const data = d.data();
+        if (data.auditType === 'LOGIN' || d.id.startsWith('LOG-') || data.actionType === 'LOGIN') {
+          result.logins.push(data);
+        } else if (data.auditType === 'EXPORT' || d.id.startsWith('EXP-')) {
+          result.exports.push(data);
+        } else if (data.auditType === 'EDIT' || d.id.startsWith('EDT-')) {
+          result.edits.push(data);
+        }
+      });
+    } catch (err: any) {
+      console.warn('[Firestore] Failed to read audit logs from docLogs:', err.message);
+    }
+    return result;
+  }
 }

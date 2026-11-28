@@ -1,5 +1,32 @@
 {
   "exportLogs": [],
-  "loginLogs": [],
+  "loginLogs": [
+    {
+      "auditType": "LOGIN",
+      "id": "LOG-1795849939116-20",
+      "ipAddress": "103.255.3.171",
+      "ipChanged": true,
+      "previousIp": "::1",
+      "status": "SUCCESS",
+      "timestamp": "2026-11-28T07:12:19.116Z",
+      "userAgent": "node",
+      "userEmail": "mohit@ambicaengineers.in",
+      "userName": "Mohit AbhayRaj Chhajer",
+      "userRole": "ADMIN"
+    },
+    {
+      "auditType": "LOGIN",
+      "id": "LOG-1795849931482-14",
+      "ipAddress": "::1",
+      "ipChanged": false,
+      "previousIp": "",
+      "status": "SUCCESS",
+      "timestamp": "2026-11-28T07:12:11.482Z",
+      "userAgent": "node",
+      "userEmail": "mohit@ambicaengineers.in",
+      "userName": "Mohit AbhayRaj Chhajer",
+      "userRole": "ADMIN"
+    }
+  ],
   "editLogs": []
 }

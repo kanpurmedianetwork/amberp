@@ -27,6 +27,7 @@ export class AuditService {
   public static async init(): Promise<void> {
     if (this.isInitialized) return;
 
+    // 1. Load from local cache if exists
     try {
       const filePath = this.getStoragePath();
       if (fs.existsSync(filePath)) {
@@ -35,17 +36,40 @@ export class AuditService {
         this.exportLogs = parsed.exportLogs || [];
         this.loginLogs = parsed.loginLogs || [];
         this.editLogs = parsed.editLogs || [];
-      } else {
-        this.exportLogs = [];
-        this.loginLogs = [];
-        this.editLogs = [];
-        this.saveToDisk();
       }
     } catch (e: any) {
       console.warn('[AuditService] Storage load error (using memory cache):', e.message);
-      this.exportLogs = [];
-      this.loginLogs = [];
-      this.editLogs = [];
+    }
+
+    // 2. Load and merge persistent audit logs from Cloud Firestore (docLogs collection)
+    try {
+      const firestoreLogs = await FirestoreService.getAuditLogsFromDocLogs();
+      if (firestoreLogs.logins.length > 0 || firestoreLogs.exports.length > 0 || firestoreLogs.edits.length > 0) {
+        const loginMap = new Map<string, LoginLogEntry>();
+        this.loginLogs.forEach((l) => loginMap.set(l.id, l));
+        firestoreLogs.logins.forEach((l) => loginMap.set(l.id, l as LoginLogEntry));
+        this.loginLogs = Array.from(loginMap.values()).sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+
+        const exportMap = new Map<string, ExportLogEntry>();
+        this.exportLogs.forEach((l) => exportMap.set(l.id, l));
+        firestoreLogs.exports.forEach((l) => exportMap.set(l.id, l as ExportLogEntry));
+        this.exportLogs = Array.from(exportMap.values()).sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+
+        const editMap = new Map<string, EditLogEntry>();
+        this.editLogs.forEach((l) => editMap.set(l.id, l));
+        firestoreLogs.edits.forEach((l) => editMap.set(l.id, l as EditLogEntry));
+        this.editLogs = Array.from(editMap.values()).sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+
+        this.saveToDisk();
+      }
+    } catch (err: any) {
+      console.warn('[AuditService] Cloud Firestore audit load notice:', err.message);
     }
 
     this.isInitialized = true;
@@ -97,6 +121,14 @@ export class AuditService {
     const previousIp = previous ? previous.ipAddress : '';
     const ipChanged = Boolean(previousIp && previousIp !== data.ip);
 
+    // If identical IP within last 10 minutes and no IP change, avoid duplicate row spam
+    if (!ipChanged && previous && previous.ipAddress === data.ip) {
+      const diffMs = Date.now() - new Date(previous.timestamp).getTime();
+      if (diffMs < 10 * 60 * 1000) {
+        return previous;
+      }
+    }
+
     const entry: LoginLogEntry = {
       id: `LOG-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       timestamp: new Date().toISOString(),
@@ -113,7 +145,8 @@ export class AuditService {
     this.loginLogs.unshift(entry);
     this.saveToDisk();
 
-    FirestoreService.syncRecord('audit_logins', entry.id, entry).catch(() => {});
+    // Persist securely to Cloud Firestore under docLogs collection
+    FirestoreService.syncRecord('docLogs', entry.id, { ...entry, auditType: 'LOGIN' }).catch(() => {});
     return entry;
   }
 
@@ -145,7 +178,8 @@ export class AuditService {
     this.exportLogs.unshift(entry);
     this.saveToDisk();
 
-    FirestoreService.syncRecord('audit_exports', entry.id, entry).catch(() => {});
+    // Persist securely to Cloud Firestore under docLogs collection
+    FirestoreService.syncRecord('docLogs', entry.id, { ...entry, auditType: 'EXPORT' }).catch(() => {});
     return entry;
   }
 
@@ -177,22 +211,56 @@ export class AuditService {
     this.editLogs.unshift(entry);
     this.saveToDisk();
 
-    FirestoreService.syncRecord('audit_edits', entry.id, entry).catch(() => {});
+    // Persist securely to Cloud Firestore under docLogs collection
+    FirestoreService.syncRecord('docLogs', entry.id, { ...entry, auditType: 'EDIT' }).catch(() => {});
     return entry;
+  }
+
+  public static async refreshFromCloud(): Promise<void> {
+    try {
+      const firestoreLogs = await FirestoreService.getAuditLogsFromDocLogs();
+      if (firestoreLogs.logins.length > 0 || firestoreLogs.exports.length > 0 || firestoreLogs.edits.length > 0) {
+        const loginMap = new Map<string, LoginLogEntry>();
+        this.loginLogs.forEach((l) => loginMap.set(l.id, l));
+        firestoreLogs.logins.forEach((l) => loginMap.set(l.id, l as LoginLogEntry));
+        this.loginLogs = Array.from(loginMap.values()).sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+
+        const exportMap = new Map<string, ExportLogEntry>();
+        this.exportLogs.forEach((l) => exportMap.set(l.id, l));
+        firestoreLogs.exports.forEach((l) => exportMap.set(l.id, l as ExportLogEntry));
+        this.exportLogs = Array.from(exportMap.values()).sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+
+        const editMap = new Map<string, EditLogEntry>();
+        this.editLogs.forEach((l) => editMap.set(l.id, l));
+        firestoreLogs.edits.forEach((l) => editMap.set(l.id, l as EditLogEntry));
+        this.editLogs = Array.from(editMap.values()).sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+
+        this.saveToDisk();
+      }
+    } catch {}
   }
 
   public static async getExportLogs(): Promise<ExportLogEntry[]> {
     await this.init();
+    await this.refreshFromCloud();
     return this.exportLogs;
   }
 
   public static async getLoginLogs(): Promise<LoginLogEntry[]> {
     await this.init();
+    await this.refreshFromCloud();
     return this.loginLogs;
   }
 
   public static async getEditLogs(search?: string, entityType?: string): Promise<EditLogEntry[]> {
     await this.init();
+    await this.refreshFromCloud();
     let logs = this.editLogs;
     if (entityType && entityType !== 'ALL') {
       logs = logs.filter((l) => l.entityType.toUpperCase() === entityType.toUpperCase());
@@ -213,6 +281,7 @@ export class AuditService {
 
   public static async getAuditStats(): Promise<AuditStats> {
     await this.init();
+    await this.refreshFromCloud();
     const uniqueIps = new Set<string>();
     this.loginLogs.forEach((l) => uniqueIps.add(l.ipAddress));
     this.editLogs.forEach((e) => uniqueIps.add(e.ipAddress));

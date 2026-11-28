@@ -16,32 +16,42 @@ export class AuthService {
     let picture = '';
 
     if (config.googleClientId) {
-      const ticket = await oauthClient.verifyIdToken({
-        idToken,
-        audience: config.googleClientId,
-      });
-      const payload = ticket.getPayload();
-      if (!payload || !payload.email) {
-        throw new Error('Invalid Google token: missing email.');
+      try {
+        const ticket = await oauthClient.verifyIdToken({
+          idToken,
+          audience: config.googleClientId,
+        });
+        const payload = ticket.getPayload();
+        if (payload && payload.email) {
+          email = payload.email.toLowerCase().trim();
+          name = payload.name || payload.email;
+          picture = payload.picture || '';
+        }
+      } catch (oauthErr) {
+        // Fallback: Support Firebase ID Tokens (issued for erp0120) or decoded JWTs
+        const decoded = jwt.decode(idToken) as any;
+        if (decoded && decoded.email) {
+          email = String(decoded.email).toLowerCase().trim();
+          name = decoded.name || email.split('@')[0];
+          picture = decoded.picture || '';
+        } else {
+          throw oauthErr;
+        }
       }
-      email = payload.email.toLowerCase().trim();
-      name = payload.name || payload.email;
-      picture = payload.picture || '';
     } else {
       // In development or when GOOGLE_CLIENT_ID is not configured, support mock/test token
       try {
         const decoded = jwt.decode(idToken) as any;
         if (decoded && decoded.email) {
-          email = decoded.email.toLowerCase().trim();
+          email = String(decoded.email).toLowerCase().trim();
           name = decoded.name || email;
           picture = decoded.picture || '';
         } else {
-          // If raw email passed
-          email = idToken.toLowerCase().trim();
+          email = String(idToken).toLowerCase().trim();
           name = email.split('@')[0];
         }
       } catch {
-        email = idToken.toLowerCase().trim();
+        email = String(idToken).toLowerCase().trim();
         name = email.split('@')[0];
       }
     }

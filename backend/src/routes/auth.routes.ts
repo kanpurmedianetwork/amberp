@@ -53,7 +53,57 @@ authRouter.post('/login-as', async (req: Request, res: Response) => {
   }
 });
 
-authRouter.get('/me', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+authRouter.post('/session', async (req: Request, res: Response) => {
+  try {
+    let token = '';
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7).trim();
+    } else if (req.body?.token && typeof req.body.token === 'string') {
+      token = req.body.token.trim();
+    }
+
+    let user = req.body?.user;
+    if (token) {
+      try {
+        user = AuthService.verifySessionToken(token);
+      } catch {}
+    }
+
+    if (!user && req.body?.email) {
+      const email = String(req.body.email).toLowerCase().trim();
+      const authUser = AuthService.listAuthorizedUsers().find((u) => u.email.toLowerCase().trim() === email);
+      if (authUser) {
+        user = authUser;
+      }
+    }
+
+    if (!user) {
+      return res.status(401).json({ error: 'Valid session token or recognized email required.' });
+    }
+
+    const ip = AuditService.getClientIp(req);
+    const userAgent = req.headers['user-agent'] || 'Unknown Device';
+    const loginEntry = await AuditService.recordLogin({ user, ip, userAgent, status: 'SUCCESS' });
+    res.json({
+      ok: true,
+      user,
+      ip: loginEntry.ipAddress,
+      ipChanged: loginEntry.ipChanged,
+      previousIp: loginEntry.previousIp,
+      timestamp: loginEntry.timestamp,
+    });
+  } catch (err: any) {
+    res.status(401).json({ error: err.message || 'Session verification failed.' });
+  }
+});
+
+authRouter.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  if (req.user) {
+    const ip = AuditService.getClientIp(req);
+    const userAgent = req.headers['user-agent'] || 'Unknown Device';
+    AuditService.recordLogin({ user: req.user, ip, userAgent, status: 'SUCCESS' }).catch(() => {});
+  }
   res.json({ user: req.user });
 });
 
